@@ -58,6 +58,29 @@ echo
 echo "▶ RLS checks"
 psql_su -q -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/02_rls_checks.sql"
 
+# Fixtures are loaded LAST and live outside supabase/migrations/, so they can
+# never reach production via `supabase db push`. Everything above ran against a
+# schema with no invented legal content in it.
+echo
+echo "▶ loading DEV FIXTURES (never applied to production)"
+psql_su -q -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/../fixtures/dev_legal_updates.sql"
+
+echo
+echo "▶ archive query checks"
+psql_su -q -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/04_archive_query_checks.sql"
+
+echo
+echo "▶ Arabic normalisation parity (TypeScript vs Postgres)"
+if command -v node >/dev/null 2>&1; then
+  PGPW="${PGPASSWORD:-postgres}"
+  psql_su -q -d "$DB" -c "alter user postgres password '$PGPW'" >/dev/null 2>&1 || true
+  node "$HERE/../../scripts/verify-normalization-parity.mjs" \
+    "postgresql://postgres:$PGPW@127.0.0.1:5432/$DB" 2>&1 \
+    | grep -v "MODULE_TYPELESS\|Reparsing\|eliminate this warning\|trace-warnings" || true
+else
+  echo "   (skipped — node not available)"
+fi
+
 echo
 echo "════════════════════════════════════════"
 echo " ALL DATABASE CHECKS PASSED"

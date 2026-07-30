@@ -98,7 +98,9 @@ describe('post-login redirect target', () => {
   // Mirrors safeNext() in lib/auth/actions.ts, which is module-private.
   function safeNext(value: string | undefined): string {
     if (!value) return '/'
-    if (!value.startsWith('/') || value.startsWith('//')) return '/'
+    if (!value.startsWith('/')) return '/'
+    if (value.startsWith('//')) return '/'
+    if (value.includes('\\')) return '/'
     return value
   }
 
@@ -115,6 +117,18 @@ describe('post-login redirect target', () => {
   it('rejects a protocol-relative URL', () => {
     // "//evil.example" is a valid absolute URL to a different host.
     expect(safeNext('//evil.example')).toBe('/')
+  })
+
+  it('rejects a backslash, which some browsers normalise to a slash', () => {
+    // "/\\evil.example" can be read as "//evil.example" by some browsers.
+    expect(safeNext('/\\evil.example')).toBe('/')
+    expect(safeNext('/updates\\@evil.example')).toBe('/')
+  })
+
+  it('preserves a filtered archive search, so login does not discard filters', () => {
+    expect(safeNext('/updates?q=%D8%B6&country=SA&page=3')).toBe(
+      '/updates?q=%D8%B6&country=SA&page=3',
+    )
   })
 
   it('falls back to the dashboard when absent', () => {

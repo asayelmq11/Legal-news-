@@ -683,7 +683,35 @@ reachable. Only M7.5 can do the latter.
 
 ---
 
-## 16. Non-goals
+## 17. Known limitation — confidence visibility is application-level
+
+The archive hides `confidence` and `ai_model` from viewers: the columns are not
+selected for them, the filter parameter is discarded before it reaches the query
+layer, and the UI control is not rendered.
+
+**This is enforced by the application, not by the database.** `admin` and
+`viewer` are rows in `public.users`, not Postgres roles. Column-level `GRANT`s
+operate on Postgres roles, and both application roles share the single
+`authenticated` role — so the database cannot distinguish them at column
+granularity, and RLS permits both to select the column. A viewer using a raw
+PostgREST client with their own token could read it.
+
+Two honest options if that ever matters:
+
+1. **Separate Postgres roles** (`app_admin`, `app_viewer`) with column-level
+   grants, assigned via a custom access-token hook. Real enforcement, at the
+   cost of a second place where roles live and must be kept in step.
+2. **A view** exposing only the reader-safe columns, with the base table
+   revoked. Simpler, but every query goes through the view and the write path
+   needs care.
+
+Neither is warranted today: all users are trusted internal legal staff, and
+confidence is a classification signal rather than privileged content. Recorded
+so the limitation is a known decision rather than an assumption.
+
+---
+
+## 18. Non-goals
 
 Explicitly out of scope and will not appear in the codebase: public pages, SEO,
 registration, comments, reactions, multi-tenancy, billing, GraphQL, microservices,

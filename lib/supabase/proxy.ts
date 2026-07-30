@@ -70,14 +70,19 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     data: { user },
   } = await supabase.auth.getUser()
 
-  const { pathname } = request.nextUrl
+  const { pathname, search } = request.nextUrl
 
   if (!user && !isPublicPath(pathname)) {
     const target = request.nextUrl.clone()
     target.pathname = '/login'
     target.search = ''
-    // Preserve the destination so login can return the user to it.
-    if (pathname !== '/') target.searchParams.set('next', pathname)
+    /*
+     * Preserve path AND query, so signing in returns the user to the filtered
+     * archive search they followed a link to — not to a bare listing with their
+     * filters silently discarded. safeNext() in lib/auth/actions.ts re-validates
+     * this before redirecting.
+     */
+    if (pathname !== '/') target.searchParams.set('next', `${pathname}${search}`)
     return NextResponse.redirect(target)
   }
 

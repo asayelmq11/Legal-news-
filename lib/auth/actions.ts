@@ -18,10 +18,18 @@ const loginSchema = z.object({
  * Only relative, single-slash paths are accepted as a post-login destination.
  * Without this, `?next=https://evil.example` would turn the login form into an
  * open redirect.
+ *
+ * Three rejections, each for a distinct trick:
+ *   - not starting with `/`  — an absolute URL to another origin
+ *   - starting with `//`     — protocol-relative, also another origin
+ *   - containing a backslash — some browsers normalise `\` to `/`, so
+ *                              `/\evil.example` can be read as `//evil.example`
  */
 function safeNext(value: string | undefined): string {
   if (!value) return '/'
-  if (!value.startsWith('/') || value.startsWith('//')) return '/'
+  if (!value.startsWith('/')) return '/'
+  if (value.startsWith('//')) return '/'
+  if (value.includes('\\')) return '/'
   return value
 }
 
