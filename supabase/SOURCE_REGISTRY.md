@@ -3,8 +3,36 @@
 52 official sources across the six GCC states and two GCC-wide bodies.
 
 **Every source ships inactive and unverified.** Nothing will be crawled until a
-person opens the site, works out how to read it, and switches it on. This page
-is how that is done.
+person opens the site, works out how to read it, and switches it on — from the
+production egress. This page is how that is done; the connectivity record lives
+in [`docs/EGRESS_VERIFICATION.md`](../docs/EGRESS_VERIFICATION.md).
+
+## Status model
+
+Two stored facts, six displayed states. Only `verified` may be activated.
+
+| Stored `config_status` | + `active` | UI status |
+|---|---|---|
+| `verified` | true | نشط — Active |
+| `verified` | false | موقوف — Disabled / تم التحقق — Verified |
+| `pending_verification` | false | بانتظار التحقق — Pending verification |
+| `blocked_by_access` | false | محجوب — Blocked by access |
+| `requires_subscription` | false | يتطلب اشتراكاً — Requires subscription |
+
+Enforced by `sources_only_verified_active`: any non-verified status refuses
+activation outright.
+
+### Flags
+
+- `exclusion_group` — suspected mirrors share a label; a partial unique index
+  permits at most one **active** member. Set on the two Bahrain LLOC candidates.
+- `requires_authority_check` — non-government domain, must be confirmed as the
+  genuine authority. Set on `adgm.com`, `qfcra.com`, `cma.org.sa`,
+  `qfma.org.qa`, `gso.org.sa`.
+
+Domain corroboration done in M3 was **registry validation only** — it confirms
+an authority's identity, never that a parser works or that the site is
+reachable. Only M7.5 establishes the latter.
 
 ---
 
@@ -118,10 +146,11 @@ update public.sources set active = true, updated_at = now()
  where country = 'SA' and authority_en = '<authority>';
 ```
 
-This fails while `config_status = 'pending_verification'` — the
-`sources_no_active_pending` constraint. Marking `verified` also fails if
+This fails for **any** status other than `verified` — the
+`sources_only_verified_active` constraint. Marking `verified` also fails if
 `parser_type` is still `unknown`, or if an `html`/`pdf` source has an empty
-`parser_config`. The order cannot be circumvented.
+`parser_config`. And a source in an `exclusion_group` whose sibling is already
+active is refused by a partial unique index. The order cannot be circumvented.
 
 **5. Never put decision logic in `parser_config`.** It describes *where to
 read* — selectors and field paths. Thresholds, retry counts, and publish rules
@@ -230,7 +259,7 @@ trusts nothing that is not in this table.
 
 Recorded in each source's `notes` column so they surface in the admin panel.
 
-**Kuwait Al-Youm has no known crawlable endpoint.** The gazette is distributed
+**Kuwait Al-Youm is `requires_subscription`.** The gazette is distributed
 by paid electronic subscription and a Ministry of Information mobile app; the
 `e.gov.kw` entry is the subscription service, not a readable index. An
 ingestion route must be agreed with the Legal Department — it may need a

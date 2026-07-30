@@ -543,6 +543,7 @@ a commit, and a push. No milestone starts before the previous one is confirmed.
 | **M5** | Internal legal archive | `/updates` full-text search, country/category/type/date filters, timeline grouping, badges; `/updates/[id]` detail | filters + search work on seeded data |
 | **M6** | Dashboard + health | Counts, by country, by category, **source health panel**, failing sources, last execution, recent updates — typed queries, no RPC | renders from live tables |
 | **M7** | Admin: sources / users / settings | Source CRUD incl. parser config + priority, role assignment, `app_settings` editor — Server Actions + Zod | viewer blocked at UI *and* by RLS/grants |
+| **M7.5** | **Egress verification (infrastructure prerequisite)** | Per-source connectivity report from the **production n8n egress**; sources reclassified `verified` / `blocked_by_access` / `requires_subscription` | every source has a recorded, dated fetch result — see §14 |
 | **M8** | n8n: scheduler + parsers | Priority dispatcher, due-source selection, four parser lanes converging on `RawItem`, PDF enrichment + Storage archive | workflow imports cleanly; each lane dry-run documented |
 | **M9** | n8n: AI + publishing gate | AI classification, JSON validation, hash generation, `publishing-gate` sub-workflow, insert, `workflow_logs` write | gate rejects each of the 5 cases correctly |
 | **M10** | n8n: retry, health, manual run | Two-layer retry/backoff, health snapshot writer, failing-source alert, signed manual-trigger webhook + admin "Run now" UI | manual run for source/country/all works end to end |
@@ -585,7 +586,104 @@ Not blocking — confirmed at the milestone where each is needed.
 
 ---
 
-## 13. Non-goals
+## 14. M7.5 — Egress verification (blocks M8)
+
+M3 established that GCC government portals sit behind WAFs that reject
+datacentre IPs: every source probed returned `403` from the site itself, not
+from any intermediate proxy. Building parsers against sites the production
+environment cannot reach would produce workflows that pass review and fail in
+service. So connectivity is verified **before** M8, from the environment that
+will actually run.
+
+### Method
+
+Run from the **production n8n egress address** — not a laptop, not CI, not a
+build container. An address that differs from production tells you nothing.
+
+For each of the 52 sources, record:
+
+| Field | Notes |
+|---|---|
+| HTTP status | of `base_url` and of any candidate feed path |
+| Redirect chain | final URL after redirects; a redirect to a portal login is a blocked source |
+| WAF behaviour | challenge page, JS interstitial, rate limit, geo-block, silent 200 with empty body |
+| `robots.txt` | which paths are disallowed, and crawl-delay if declared |
+| Authentication | none / account / paid subscription / signed agreement |
+| Fixed IP needed | whether the site requires an allow-listed source address |
+| Date and egress IP | so a later re-test is comparable |
+
+Results land in `docs/EGRESS_VERIFICATION.md` and drive each source's
+`config_status`.
+
+### Rules — non-negotiable
+
+**Permitted:** official RSS and Atom feeds; documented public APIs; bulk or
+downloadable files the authority publishes; paid or free subscriptions taken out
+in the company's name; written allow-list access granted by the authority;
+honouring `robots.txt` and any declared crawl-delay.
+
+**Prohibited, without exception:** CAPTCHA solving or bypass; anti-bot
+circumvention including browser-fingerprint spoofing or challenge replay;
+residential or rotating proxy networks used to disguise origin; credential
+sharing or any access outside what an authority has granted; ignoring
+`robots.txt`; request rates that degrade a public service.
+
+A source that cannot be reached lawfully **stays inactive**. That is an
+acceptable outcome and must be recorded as `blocked_by_access` or
+`requires_subscription`, not worked around. Incomplete coverage that everyone
+can see beats covert access nobody sanctioned — and for a Legal Department, the
+method of acquisition is itself a compliance question.
+
+### Exit criteria
+
+1. Every source has a dated fetch result from the production egress.
+2. A source reaches `verified` **only** after a successful end-to-end fetch —
+   reachable, parseable, and lawfully accessible — from that environment.
+3. Blocked and subscription-gated sources are recorded with the specific
+   obstacle and the action needed to clear it.
+4. Access decisions requiring commercial or legal commitment (subscriptions,
+   allow-list requests) are escalated to the Legal Department, not assumed.
+
+---
+
+## 15. Source status model
+
+The database stores two orthogonal facts; the admin UI derives six states from
+them. No redundant status column, and no state that can contradict itself.
+
+| Stored | Values |
+|---|---|
+| `sources.config_status` | `pending_verification` · `verified` · `blocked_by_access` · `requires_subscription` |
+| `sources.active` | boolean |
+
+| UI status | Derived from | Meaning |
+|---|---|---|
+| نشط — Active | `active = true` | Being crawled |
+| موقوف — Disabled | `verified` + `active = false` | Ready, deliberately switched off |
+| بانتظار التحقق — Pending verification | `pending_verification` | Not yet examined |
+| تم التحقق — Verified | `verified` + `active = false` | Same row as Disabled; distinguished by intent in the UI copy |
+| محجوب — Blocked by access | `blocked_by_access` | WAF, geo-block or robots restriction; needs an infrastructure decision |
+| يتطلب اشتراكاً — Requires subscription | `requires_subscription` | Lawful access needs a paid or signed arrangement |
+
+Only `verified` may be activated — enforced by `sources_no_active_pending`,
+which now rejects activation from any non-verified status.
+
+### Registry flags
+
+- `exclusion_group` — sources that may duplicate one another share a group; a
+  partial unique index permits **at most one active member**. Used for the two
+  Bahrain LLOC candidates.
+- `requires_authority_check` — the domain is not a `.gov` and must be confirmed
+  as the genuine authority before activation. Set on `adgm.com`, `qfcra.com`,
+  `cma.org.sa`, `qfma.org.qa`, `gso.org.sa`.
+
+Domain corroboration performed in M3 was **registry validation only** — it
+confirms an authority's identity, never that a parser works or that the site is
+reachable. Only M7.5 can do the latter.
+
+---
+
+## 16. Non-goals
 
 Explicitly out of scope and will not appear in the codebase: public pages, SEO,
 registration, comments, reactions, multi-tenancy, billing, GraphQL, microservices,

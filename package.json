@@ -9,9 +9,15 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm run lint && npm run build"
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:types": "node scripts/generate-db-types.mjs",
+    "db:check": "bash supabase/tests/run_local_checks.sh"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.111.0",
     "next": "16.2.12",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -21,12 +27,16 @@
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "22.20.1",
+    "@types/pg": "^8.20.0",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "^6.0.5",
     "eslint": "9.39.5",
     "eslint-config-next": "16.2.12",
+    "pg": "^8.22.0",
     "tailwindcss": "4.3.3",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=20.9.0"

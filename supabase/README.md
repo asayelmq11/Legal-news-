@@ -16,6 +16,8 @@ migrations/
   0007_parser_type_unknown.sql  adds parser_type 'unknown' (must stay alone)
   0008_source_config_status.sql config_status + registry integrity
   0009_seed_sources.sql       52 trusted sources, all pending verification
+  0010_config_status_values.sql  adds blocked_by_access / requires_subscription
+  0011_source_registry_flags.sql exclusion groups, authority checks, access states
 tests/
   00_bootstrap_local.sql    LOCAL ONLY — stubs auth schema + roles
   01_schema_checks.sql      structure, constraints, Arabic search
@@ -45,7 +47,7 @@ for why Postgres RLS leaves no alternative.
 ## Local verification
 
 Requires a running Postgres (tested on 16.13) and permission to create
-databases. Applies every migration twice, then runs 57 assertions.
+databases. Applies every migration twice, then runs 61 assertions.
 
 ```bash
 supabase/tests/run_local_checks.sh
@@ -210,7 +212,7 @@ partial-word and fuzzy matching that full-text search misses.
 
 ## Verified locally
 
-57 assertions, all passing against Postgres 16.13:
+61 assertions, all passing against Postgres 16.13:
 
 - six tables exactly; no triggers; exactly one function
 - RLS enabled on all six tables

@@ -49,7 +49,10 @@ npm run dev
 | `npm run build` | Production build (fails on type errors) |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run verify` | typecheck → lint → build. **This is what CI runs.** |
+| `npm run test` | vitest — auth, guard and status-derivation tests |
+| `npm run verify` | typecheck → lint → test → build. **This is what CI runs.** |
+| `npm run db:check` | applies all migrations to a scratch Postgres and runs 61 SQL assertions |
+| `npm run db:types` | regenerates `types/database.ts` from a live schema |
 
 Next 16 no longer runs ESLint during `next build`, which is why `verify` exists
 as a separate composite step rather than relying on the build alone.
@@ -77,15 +80,27 @@ closed — disabled with an explanation, never an unauthenticated request.
 ## Project layout
 
 ```
-app/                Next.js App Router (RTL, Arabic-first)
+app/
+  (app)/            authenticated shell — guarded by requireActiveUser()
+  login/            sign-in (no self-provisioning)
+  no-access/        unprovisioned and deactivated states
+  unauthorized/     insufficient role
+  configuration-error/  missing environment, fails closed
 components/         UI primitives and feature components
 lib/
+  auth/             session resolution, role guards, sign-in/out actions
+  supabase/         browser / server / proxy clients
+  sources/          source status derivation
   constants/        country and taxonomy registries, Arabic labels
   env.ts            validated server environment (server-only)
-  utils.ts          shared helpers
+  nav.ts            role-aware navigation
+proxy.ts            Next 16 proxy — session refresh + coarse redirect
+scripts/            database type generator
+tests/              vitest — auth, guards, status derivation
+types/database.ts   GENERATED from the live schema
 supabase/
   migrations/         ordered SQL — integrity constraints only
-  tests/              local verification suite (57 assertions)
+  tests/              SQL verification suite (61 assertions)
 n8n/workflows/        importable workflow JSON
 docs/                 implementation plan and runbooks
 ```
@@ -103,10 +118,11 @@ means changing all three together.
 | M1 Project foundation | ✅ complete |
 | M2 Database schema | ✅ complete |
 | M3 Source registry | ✅ complete |
-| M4 Auth + app shell | ⬜ next |
-| M5 Internal legal archive | ⬜ |
+| M4 Auth + app shell | ✅ complete |
+| M5 Internal legal archive | ⬜ next |
 | M6 Dashboard + health | ⬜ |
 | M7 Admin: sources / users / settings | ⬜ |
+| M7.5 Egress verification (blocks M8) | ⬜ |
 | M8 n8n: scheduler + parsers | ⬜ |
 | M9 n8n: AI + publishing gate | ⬜ |
 | M10 n8n: retry, health, manual run | ⬜ |

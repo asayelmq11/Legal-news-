@@ -320,5 +320,77 @@ declare before_n int; after_n int; tuned jsonb; begin
   update public.sources set parser_config='{}'::jsonb where authority_en='Central Bank of Oman';
 end $$;
 
+\echo '── S18. M3 access findings are recorded as status, not prose ──────────'
+do $$
+declare st public.config_status; n int; begin
+  select config_status into st from public.sources
+   where country='KW' and authority_en='Kuwait Al-Youm Official Gazette';
+  if st <> 'requires_subscription' then
+    raise exception 'Kuwait Al-Youm should be requires_subscription, is %', st;
+  end if;
+
+  select count(*) into n from public.sources
+   where exclusion_group='bh-lloc';
+  if n <> 2 then raise exception 'expected 2 Bahrain LLOC candidates grouped, found %', n; end if;
+
+  select count(*) into n from public.sources where requires_authority_check;
+  if n <> 5 then raise exception 'expected 5 non-government domains flagged, found %', n; end if;
+
+  raise notice 'PASS — Kuwait gazette gated, 2 Bahrain candidates grouped, 5 domains flagged';
+end $$;
+
+\echo '── S19. only a verified source can be activated ────────────────────────'
+do $$
+declare sid uuid; st public.config_status; begin
+  foreach st in array array['pending_verification','blocked_by_access','requires_subscription']::public.config_status[]
+  loop
+    select id into sid from public.sources where config_status='pending_verification' limit 1;
+    update public.sources set config_status=st where id=sid;
+    begin
+      update public.sources set active=true where id=sid;
+      raise exception 'SAFETY FAILURE: a % source was activated', st;
+    exception when check_violation then null; end;
+    update public.sources set config_status='pending_verification' where id=sid;
+  end loop;
+  raise notice 'PASS — pending / blocked / subscription-gated sources all refuse activation';
+end $$;
+
+\echo '── S20. mutually exclusive sources cannot both be active ───────────────'
+do $$
+declare a uuid; b uuid; begin
+  select id into a from public.sources where authority_en='Legislation and Legal Opinion Commission';
+  select id into b from public.sources where authority_en='LLOC Legislation Portal';
+
+  -- verify and activate the first
+  update public.sources set parser_type='html',
+    parser_config='{"list":".x","title":"a","link":"a@href","date":".d"}'::jsonb,
+    config_status='verified' where id in (a, b);
+  update public.sources set active=true where id=a;
+
+  -- the second must not be able to join it
+  begin
+    update public.sources set active=true where id=b;
+    raise exception 'DUPLICATION RISK: both Bahrain LLOC sources went active';
+  exception when unique_violation then
+    raise notice 'PASS — second member of an exclusion group cannot be activated';
+  end;
+
+  -- restore
+  update public.sources set active=false, config_status='pending_verification',
+    parser_type='unknown', parser_config='{}'::jsonb where id in (a, b);
+end $$;
+
+\echo '── S21. no source is active (nothing verified yet) ─────────────────────'
+do $$
+declare n int; begin
+  select count(*) into n from public.sources where active;
+  if n <> 0 then raise exception '% sources are active before egress verification', n; end if;
+
+  select count(*) into n from public.sources where config_status='verified';
+  if n <> 0 then raise exception '% sources marked verified without an egress test', n; end if;
+
+  raise notice 'PASS — 0 active, 0 verified: nothing runs until M7.5 egress verification';
+end $$;
+
 \echo ''
 \echo '════════ ALL SOURCE REGISTRY CHECKS PASSED ════════'
