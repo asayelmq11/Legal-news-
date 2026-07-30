@@ -7,7 +7,10 @@
       "name": "Called by scheduler",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [-800, 400]
+      "position": [
+        -800,
+        400
+      ]
     },
     {
       "parameters": {
@@ -15,12 +18,18 @@
           "values": [
             {
               "conditions": {
-                "options": { "caseSensitive": true, "version": 2 },
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.source.parser_type }}",
                     "rightValue": "rss",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -29,12 +38,18 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "version": 2 },
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.source.parser_type }}",
                     "rightValue": "api",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -43,12 +58,18 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "version": 2 },
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.source.parser_type }}",
                     "rightValue": "html",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -57,12 +78,18 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "version": 2 },
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.source.parser_type }}",
                     "rightValue": "pdf",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -71,40 +98,57 @@
             }
           ]
         },
-        "options": { "fallbackOutput": "none" }
+        "options": {
+          "fallbackOutput": "none"
+        }
       },
       "id": "b2000000-0000-4000-8000-000000000002",
       "name": "Parser router",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [-580, 400]
+      "position": [
+        -580,
+        400
+      ]
     },
-
     {
       "parameters": {
         "url": "={{ $json.source.feed_url }}",
         "options": {
           "timeout": 30000,
-          "response": { "response": { "neverError": false, "responseFormat": "text" } }
+          "response": {
+            "response": {
+              "neverError": false,
+              "responseFormat": "text"
+            }
+          }
         }
       },
       "id": "b2000000-0000-4000-8000-000000000010",
       "name": "Fetch RSS",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-320, 100],
+      "position": [
+        -320,
+        100
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 2000,
       "onError": "continueErrorOutput"
     },
     {
-      "parameters": { "options": {} },
+      "parameters": {
+        "options": {}
+      },
       "id": "b2000000-0000-4000-8000-000000000011",
       "name": "Parse XML",
       "type": "n8n-nodes-base.xml",
       "typeVersion": 1,
-      "position": [-100, 100]
+      "position": [
+        -100,
+        100
+      ]
     },
     {
       "parameters": {
@@ -114,22 +158,29 @@
       "name": "RSS → RawItem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [120, 100]
+      "position": [
+        120,
+        100
+      ]
     },
-
     {
       "parameters": {
         "url": "={{ $json.source.feed_url }}",
         "sendHeaders": true,
         "specifyHeaders": "json",
         "jsonHeaders": "={{ JSON.stringify($json.source.parser_config.headers || {}) }}",
-        "options": { "timeout": 30000 }
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "b2000000-0000-4000-8000-000000000020",
       "name": "Fetch API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-320, 300],
+      "position": [
+        -320,
+        300
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 2000,
@@ -143,19 +194,31 @@
       "name": "API → RawItem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-100, 300]
+      "position": [
+        -100,
+        300
+      ]
     },
-
     {
       "parameters": {
         "url": "={{ $json.source.base_url }}",
-        "options": { "timeout": 30000, "response": { "response": { "responseFormat": "text" } } }
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
       },
       "id": "b2000000-0000-4000-8000-000000000030",
       "name": "Fetch HTML",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-320, 500],
+      "position": [
+        -320,
+        500
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 2000,
@@ -180,7 +243,10 @@
       "name": "Extract listing",
       "type": "n8n-nodes-base.html",
       "typeVersion": 1.2,
-      "position": [-100, 500]
+      "position": [
+        -100,
+        500
+      ]
     },
     {
       "parameters": {
@@ -190,19 +256,31 @@
       "name": "HTML → RawItem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [120, 500]
+      "position": [
+        120,
+        500
+      ]
     },
-
     {
       "parameters": {
         "url": "={{ $json.source.base_url }}",
-        "options": { "timeout": 30000, "response": { "response": { "responseFormat": "text" } } }
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
       },
       "id": "b2000000-0000-4000-8000-000000000040",
       "name": "Fetch PDF index",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-320, 700],
+      "position": [
+        -320,
+        700
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 2000,
@@ -216,9 +294,11 @@
       "name": "PDF index → RawItem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-100, 700]
+      "position": [
+        -100,
+        700
+      ]
     },
-
     {
       "parameters": {
         "numberInputs": 4
@@ -227,7 +307,10 @@
       "name": "Merge lanes",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [360, 400]
+      "position": [
+        360,
+        400
+      ]
     },
     {
       "parameters": {
@@ -237,7 +320,10 @@
       "name": "Normalise RawItem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [580, 400]
+      "position": [
+        580,
+        400
+      ]
     },
     {
       "parameters": {
@@ -247,65 +333,537 @@
       "name": "Record fetch failure",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [120, 900]
+      "position": [
+        120,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "app_settings",
+        "returnAll": true,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "condition": "eq",
+              "keyValue": "ai.confidence_threshold"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000070",
+      "name": "Get threshold",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        580,
+        620
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_SERVICE_ROLE",
+          "name": "Supabase (service_role)"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify({ \"anthropic-version\": \"2023-06-01\", \"content-type\": \"application/json\" }) }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 1500, temperature: 0, system: $('Classification prompt').first().json.system_prompt, messages: [{ role: 'user', content: `الجهة: ${$json.source.authority_ar}\\nالدولة المسجّلة للمصدر: ${$json.source.country}\\nالرابط: ${$json.source_url}\\nتاريخ النشر المستخرج من المصدر: ${$json.publication_date || 'غير متوفر'}\\n\\nالعنوان:\\n${$json.title_raw}\\n\\nالنص:\\n${$json.content_raw}` }] }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000071",
+      "name": "Classify with AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        400
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ANTHROPIC_API_KEY",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p1",
+              "name": "system_prompt",
+              "value": "أنت مصنِّف آلي في منصة رصد قانوني داخلية لإدارة قانونية.\n\nمهمتك محدودة بدقة: تلخيص وتصنيف واستخراج بيانات وصفية من نص صادر عن جهة رسمية.\n\nلا تفعل ما يلي إطلاقاً:\n- لا تخترع أي معلومة غير موجودة في النص.\n- لا تفسّر النظام أو تشرح أثره القانوني.\n- لا تستنتج تاريخاً أو رقماً أو جهة غير مذكورة صراحة.\n- لا تعدّل المعنى القانوني أو تعيد صياغته بما يغيّره.\nإن لم تكن المعلومة في النص، أعد null أو قائمة فارغة. الصمت أصح من التخمين.\n\nقرارك الأول: هل هذا تحديث قانوني أو تنظيمي حقيقي؟\n\nاعتبره تحديثاً قانونياً (is_legal_update = true) إذا كان: نظاماً أو قانوناً جديداً، مرسوماً ملكياً أو سلطانياً أو أميرياً، قراراً وزارياً، لائحة تنفيذية، تعميماً، إطاراً تنظيمياً، إشعاراً رسمياً، متطلب امتثال، موعداً تنظيمياً نهائياً، سابقة قضائية، مشروعاً مطروحاً للاستطلاع، تغييراً ضريبياً أو جمركياً، تنظيماً للعمل أو التراخيص أو حماية البيانات أو الأمن السيبراني أو المنافسة أو التنظيم المالي.\n\nاعتبره غير قانوني (is_legal_update = false) إذا كان: خبر مؤتمر أو اجتماع أو ورشة، مذكرة تفاهم، زيارة رسمية، فعالية، مقابلة، بيان صحفي، إحصاءات، تقرير دوري، مقال رأي، محتوى تسويقي أو ترويجي، تعيينات إدارية، أو خبر قديم يعيد نشر ما سبق.\n\nعند الشك، اخفض قيمة confidence بدل أن ترفع is_legal_update. المنصة تتعامل مع الثقة المنخفضة بالرفض، وهذا هو السلوك المطلوب.\n\nأعد كائن JSON واحداً فقط. لا نص قبله ولا بعده، ولا شرح، ولا علامات markdown.\n\n{\"title_ar\":\"\",\"summary_ar\":\"\",\"country\":\"SA|AE|KW|QA|BH|OM|GCC\",\"category\":\"tax|customs|employment|corporate|financial|capital_markets|banking|data_privacy|cybersecurity|competition|intellectual_property|litigation|licensing|real_estate|energy|healthcare|trade|general\",\"document_type\":\"law|royal_decree|ministerial_decision|executive_regulation|circular|regulatory_framework|official_notice|court_precedent|consultation_draft|other\",\"legal_status\":\"enacted|effective|draft|amended|repealed|pending\",\"is_legal_update\":true,\"confidence\":0.98,\"publication_date\":null,\"effective_date\":null,\"affected_entities\":[],\"keywords\":[]}\n\nالقيم المسموحة للحقول المقيّدة محصورة في القوائم أعلاه حرفياً. أي قيمة خارجها تُرفَض ولا تُصحَّح، فاختر من القائمة أو اختر general / other.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000072",
+      "name": "Classification prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        700,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Carries the RawItem alongside the AI response so the validator can pair\n// them. n8n keeps item order through the HTTP node, but pairing explicitly is\n// cheaper than relying on that.\nconst items = $('Normalise RawItem').all().map(i => i.json);\nreturn $input.all().map((entry, i) => ({ json: { ...entry.json, __item: items[i] } }));"
+      },
+      "id": "b2000000-0000-4000-8000-000000000073",
+      "name": "Pair with RawItem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parses and validates the model's JSON. FAIL CLOSED.\n//\n// Anything malformed, incomplete, or outside the allowed enums is rejected\n// outright — never coerced, never defaulted. A coerced category would put a\n// confident wrong classification in a legal archive, which is worse than a gap.\n\nconst COUNTRY = ['SA','AE','KW','QA','BH','OM','GCC'];\nconst CATEGORY = ['tax','customs','employment','corporate','financial','capital_markets','banking','data_privacy','cybersecurity','competition','intellectual_property','litigation','licensing','real_estate','energy','healthcare','trade','general'];\nconst DOC_TYPE = ['law','royal_decree','ministerial_decision','executive_regulation','circular','regulatory_framework','official_notice','court_precedent','consultation_draft','other'];\nconst STATUS = ['enacted','effective','draft','amended','repealed','pending'];\n\nconst ISO_DATE = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst isDate = (v) => {\n  if (v === null || v === undefined || v === '') return true;\n  if (typeof v !== 'string' || !ISO_DATE.test(v)) return false;\n  const d = new Date(v + 'T00:00:00Z');\n  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0,10) === v;\n};\nconst strList = (v) => Array.isArray(v) && v.every(x => typeof x === 'string');\nconst nonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const item = entry.json.__item;\n  const response = entry.json;\n\n  const fail = (reason, detail) => out.push({ json: {\n    __item: item, __rejected: true, reason, detail: detail ? String(detail).slice(0,300) : null,\n  }});\n\n  // The Messages API returns content blocks; the text block carries the JSON.\n  const text = response?.content?.[0]?.text;\n  if (!nonEmpty(text)) { fail('ai_empty_response'); continue; }\n\n  let ai;\n  try {\n    ai = JSON.parse(text.trim());\n  } catch {\n    // One tolerated shape: the model wrapped the object in prose or a fence.\n    const m = text.match(/\\{[\\s\\S]*\\}/);\n    if (!m) { fail('ai_parse_failure', text); continue; }\n    try { ai = JSON.parse(m[0]); } catch { fail('ai_parse_failure', text); continue; }\n  }\n\n  if (!ai || typeof ai !== 'object' || Array.isArray(ai)) { fail('ai_not_an_object'); continue; }\n\n  if (!nonEmpty(ai.title_ar)) { fail('ai_invalid_output', 'title_ar'); continue; }\n  if (!nonEmpty(ai.summary_ar)) { fail('ai_invalid_output', 'summary_ar'); continue; }\n  if (!COUNTRY.includes(ai.country)) { fail('ai_invalid_output', 'country=' + ai.country); continue; }\n  if (!CATEGORY.includes(ai.category)) { fail('ai_invalid_output', 'category=' + ai.category); continue; }\n  if (!DOC_TYPE.includes(ai.document_type)) { fail('ai_invalid_output', 'document_type=' + ai.document_type); continue; }\n  if (!STATUS.includes(ai.legal_status)) { fail('ai_invalid_output', 'legal_status=' + ai.legal_status); continue; }\n  if (typeof ai.is_legal_update !== 'boolean') { fail('ai_invalid_output', 'is_legal_update'); continue; }\n  if (typeof ai.confidence !== 'number' || !Number.isFinite(ai.confidence) || ai.confidence < 0 || ai.confidence > 1) {\n    fail('ai_invalid_output', 'confidence=' + ai.confidence); continue;\n  }\n  if (!isDate(ai.effective_date)) { fail('ai_invalid_output', 'effective_date=' + ai.effective_date); continue; }\n  if (!isDate(ai.publication_date)) { fail('ai_invalid_output', 'publication_date=' + ai.publication_date); continue; }\n  if (ai.affected_entities !== undefined && !strList(ai.affected_entities)) { fail('ai_invalid_output', 'affected_entities'); continue; }\n  if (ai.keywords !== undefined && !strList(ai.keywords)) { fail('ai_invalid_output', 'keywords'); continue; }\n\n  out.push({ json: {\n    __item: item,\n    __rejected: false,\n    ai: {\n      title_ar: ai.title_ar.trim(),\n      summary_ar: ai.summary_ar.trim(),\n      country: ai.country,\n      category: ai.category,\n      document_type: ai.document_type,\n      legal_status: ai.legal_status,\n      is_legal_update: ai.is_legal_update,\n      confidence: ai.confidence,\n      publication_date: ai.publication_date || null,\n      effective_date: ai.effective_date || null,\n      affected_entities: (ai.affected_entities || []).slice(0, 20),\n      keywords: (ai.keywords || []).slice(0, 20),\n    },\n  }});\n}\n\nreturn out;"
+      },
+      "id": "b2000000-0000-4000-8000-000000000074",
+      "name": "Validate AI output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds the string that becomes content_hash, and drops items the AI stage\n// already rejected.\n//\n// Hash inputs: source_id | source_url | title | publication_date. The URL is\n// included deliberately — two authorities republishing the same instrument at\n// different URLs are two archive entries, and the M3 exclusion-group rule\n// handles the mirror case instead.\n\nconst out = [];\nfor (const entry of $input.all()) {\n  const e = entry.json;\n  if (e.__rejected) { out.push({ json: e }); continue; }\n\n  const item = e.__item;\n  const pubDate = item.publication_date || e.ai.publication_date || '';\n\n  out.push({ json: {\n    ...e,\n    hash_input: [item.source_id, item.source_url, e.ai.title_ar, pubDate].join('|'),\n  }});\n}\nreturn out;"
+      },
+      "id": "b2000000-0000-4000-8000-000000000075",
+      "name": "Build hash input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "action": "hash",
+        "type": "SHA256",
+        "value": "={{ $json.hash_input || 'skipped' }}",
+        "dataPropertyName": "content_hash",
+        "encoding": "hex"
+      },
+      "id": "b2000000-0000-4000-8000-000000000076",
+      "name": "SHA256 content hash",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepares the Publishing Gate payload and reads the fail-closed threshold.\n//\n// ai.confidence_threshold is deliberately NOT defaulted here. If it is missing\n// or malformed the gate rejects everything — defaulting it could quietly widen\n// what publishes, so absence must be loud.\n\nconst settings = $('Get threshold').all().map(i => i.json);\nconst row = settings.find(r => r.key === 'ai.confidence_threshold');\nconst threshold = row && typeof row.value === 'number' ? row.value : null;\n\nconst out = [];\nfor (const entry of $input.all()) {\n  const e = entry.json;\n  if (e.__rejected) { out.push({ json: e }); continue; }\n\n  const item = e.__item;\n  out.push({ json: {\n    __rejected: false,\n    confidence_threshold: threshold,\n    ai: e.ai,\n    item: {\n      source_id: item.source_id,\n      source_url: item.source_url,\n      content_hash: e.content_hash,\n      publication_date: item.publication_date,\n      // Verbatim source text, stored so a lawyer can check the summary against\n      // what the authority actually published.\n      raw_excerpt: (item.content_raw || item.title_raw || '').slice(0, 20000),\n      // The official document URL, preserved end to end.\n      document_path: (item.attachments && item.attachments[0]) || null,\n      ai_model: 'claude-sonnet-5',\n    },\n  }});\n}\nreturn out;"
+      },
+      "id": "b2000000-0000-4000-8000-000000000077",
+      "name": "Prepare gate payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "03-publishing-gate",
+          "mode": "list",
+          "cachedResultName": "03 — Publishing Gate"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {}
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000078",
+      "name": "Publishing Gate",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregates every outcome for this source into ONE workflow_logs row.\n//\n// One row per source per run, not one per item: workflow_logs records\n// executions, and the dashboard aggregates from it. Rejections are counted in\n// rejection_reasons rather than logged individually — a rejection is a normal\n// decision, not an incident.\n\nconst src = $('Called by scheduler').first().json.source;\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\n\nlet fetched = 0, published = 0, rejected = 0;\nconst reasons = {};\nlet errorMessage = null;\n\nfor (const entry of $input.all()) {\n  const e = entry.json;\n  fetched += 1;\n\n  if (e.__rejected) {\n    rejected += 1;\n    reasons[e.reason] = (reasons[e.reason] || 0) + 1;\n    continue;\n  }\n  if (e.outcome === 'published') { published += 1; continue; }\n  if (e.outcome === 'duplicate') { rejected += 1; reasons.duplicate = (reasons.duplicate || 0) + 1; continue; }\n  if (e.outcome === 'rejected') {\n    rejected += 1;\n    reasons[e.reason || 'unknown'] = (reasons[e.reason || 'unknown'] || 0) + 1;\n    continue;\n  }\n  if (e.outcome === 'insert_failed') {\n    rejected += 1;\n    reasons.insert_failed = (reasons.insert_failed || 0) + 1;\n    errorMessage = e.error_message || errorMessage;\n  }\n}\n\nconst finished = new Date().toISOString();\n\n// partial: some items failed to insert. failed is reserved for a run that\n// could not fetch at all, which the M10 failure branch records.\nconst status = errorMessage ? 'partial' : 'success';\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: src.id,\n  trigger_type: trigger,\n  status,\n  items_fetched: fetched,\n  items_published: published,\n  items_rejected: rejected,\n  rejection_reasons: reasons,\n  error_message: errorMessage,\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];"
+      },
+      "id": "b2000000-0000-4000-8000-000000000079",
+      "name": "Summarise run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "workflow_logs",
+        "dataToSend": "autoMapInputData",
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000080",
+      "name": "Write workflow log",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        400
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_SERVICE_ROLE",
+          "name": "Supabase (service_role)"
+        }
+      }
     }
   ],
   "connections": {
     "Called by scheduler": {
-      "main": [[{ "node": "Parser router", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Parser router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Parser router": {
       "main": [
-        [{ "node": "Fetch RSS", "type": "main", "index": 0 }],
-        [{ "node": "Fetch API", "type": "main", "index": 0 }],
-        [{ "node": "Fetch HTML", "type": "main", "index": 0 }],
-        [{ "node": "Fetch PDF index", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Fetch RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch HTML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch PDF index",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Fetch RSS": {
       "main": [
-        [{ "node": "Parse XML", "type": "main", "index": 0 }],
-        [{ "node": "Record fetch failure", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Parse XML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record fetch failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Parse XML": {
-      "main": [[{ "node": "RSS → RawItem", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "RSS → RawItem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "RSS → RawItem": {
-      "main": [[{ "node": "Merge lanes", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Merge lanes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch API": {
       "main": [
-        [{ "node": "API → RawItem", "type": "main", "index": 0 }],
-        [{ "node": "Record fetch failure", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "API → RawItem",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record fetch failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "API → RawItem": {
-      "main": [[{ "node": "Merge lanes", "type": "main", "index": 1 }]]
+      "main": [
+        [
+          {
+            "node": "Merge lanes",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
     },
     "Fetch HTML": {
       "main": [
-        [{ "node": "Extract listing", "type": "main", "index": 0 }],
-        [{ "node": "Record fetch failure", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Extract listing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record fetch failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Extract listing": {
-      "main": [[{ "node": "HTML → RawItem", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "HTML → RawItem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "HTML → RawItem": {
-      "main": [[{ "node": "Merge lanes", "type": "main", "index": 2 }]]
+      "main": [
+        [
+          {
+            "node": "Merge lanes",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
     },
     "Fetch PDF index": {
       "main": [
-        [{ "node": "PDF index → RawItem", "type": "main", "index": 0 }],
-        [{ "node": "Record fetch failure", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "PDF index → RawItem",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record fetch failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "PDF index → RawItem": {
-      "main": [[{ "node": "Merge lanes", "type": "main", "index": 3 }]]
+      "main": [
+        [
+          {
+            "node": "Merge lanes",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
     },
     "Merge lanes": {
-      "main": [[{ "node": "Normalise RawItem", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Normalise RawItem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise RawItem": {
+      "main": [
+        [
+          {
+            "node": "Classification prompt",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get threshold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classification prompt": {
+      "main": [
+        [
+          {
+            "node": "Classify with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify with AI": {
+      "main": [
+        [
+          {
+            "node": "Pair with RawItem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pair with RawItem": {
+      "main": [
+        [
+          {
+            "node": "Validate AI output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate AI output": {
+      "main": [
+        [
+          {
+            "node": "Build hash input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build hash input": {
+      "main": [
+        [
+          {
+            "node": "SHA256 content hash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SHA256 content hash": {
+      "main": [
+        [
+          {
+            "node": "Prepare gate payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare gate payload": {
+      "main": [
+        [
+          {
+            "node": "Publishing Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publishing Gate": {
+      "main": [
+        [
+          {
+            "node": "Summarise run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarise run": {
+      "main": [
+        [
+          {
+            "node": "Write workflow log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -313,5 +871,9 @@
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all"
   },
-  "tags": [{ "name": "legal-intelligence" }]
+  "tags": [
+    {
+      "name": "legal-intelligence"
+    }
+  ]
 }

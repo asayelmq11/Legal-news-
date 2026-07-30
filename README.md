@@ -49,7 +49,7 @@ npm run dev
 | `npm run build` | Production build (fails on type errors) |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | vitest — 190 assertions incl. n8n workflow structure |
+| `npm run test` | vitest — 206 assertions incl. n8n workflow + gate rules |
 | `npm run verify` | typecheck → lint → test → build. **This is what CI runs.** |
 | `npm run db:check` | applies all migrations to a scratch Postgres and runs 61 SQL assertions |
 | `npm run db:types` | regenerates `types/database.ts` from a live schema |
@@ -128,7 +128,7 @@ means changing all three together.
 | M7 Admin: sources / users / settings | ✅ complete |
 | M7.5 Egress verification | 🔧 tooling shipped — must be RUN from production egress |
 | M8 n8n: scheduler + parsers | ✅ complete |
-| M9 n8n: AI + publishing gate | ⬜ next |
-| M10 n8n: retry, health, manual run | ⬜ |
+| M9 n8n: AI + publishing gate | ✅ complete |
+| M10 n8n: retry, health, manual run | ⬜ next |
 | M11 n8n: newsletter | ⬜ |
 | M12 Hardening + docs | ⬜ |
