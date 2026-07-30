@@ -1,0 +1,317 @@
+{
+  "name": "02 — Source Ingestion",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "b2000000-0000-4000-8000-000000000001",
+      "name": "Called by scheduler",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [-800, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.source.parser_type }}",
+                    "rightValue": "rss",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "rss"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.source.parser_type }}",
+                    "rightValue": "api",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "api"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.source.parser_type }}",
+                    "rightValue": "html",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "html"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.source.parser_type }}",
+                    "rightValue": "pdf",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "pdf"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "none" }
+      },
+      "id": "b2000000-0000-4000-8000-000000000002",
+      "name": "Parser router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [-580, 400]
+    },
+
+    {
+      "parameters": {
+        "url": "={{ $json.source.feed_url }}",
+        "options": {
+          "timeout": 30000,
+          "response": { "response": { "neverError": false, "responseFormat": "text" } }
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000010",
+      "name": "Fetch RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-320, 100],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "b2000000-0000-4000-8000-000000000011",
+      "name": "Parse XML",
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [-100, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// RSS lane → RawItem[]\n//\n// parser_config may name which fields carry the date and body; both default\n// to the RSS conventions. Nothing here is guessed at crawl time — an\n// unconfigured source never reaches this workflow, because it cannot be\n// activated.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst dateField = cfg.date_field || 'pubDate';\nconst contentField = cfg.content_field || 'description';\n\nconst root = $input.first().json;\nconst channel = root?.rss?.channel ?? root?.feed ?? {};\nlet entries = channel.item ?? channel.entry ?? root?.feed?.entry ?? [];\nif (!Array.isArray(entries)) entries = [entries];\n\nconst text = (v) => {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  if (typeof v === 'object') return v._ ?? v['#text'] ?? '';\n  return String(v);\n};\n\nconst toIsoDate = (v) => {\n  const raw = text(v);\n  if (!raw) return null;\n  const d = new Date(raw);\n  // An unparseable date becomes null. The AI is instructed never to invent\n  // one, and neither does this.\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nconst linkOf = (e) => {\n  if (typeof e.link === 'string') return e.link;\n  if (Array.isArray(e.link)) return e.link[0]?.$?.href ?? text(e.link[0]);\n  return e.link?.$?.href ?? text(e.link) ?? e.guid ? text(e.guid) : '';\n};\n\nreturn entries.filter(Boolean).map((e) => ({\n  json: {\n    source_id: src.id,\n    source_url: linkOf(e),\n    title_raw: text(e.title),\n    content_raw: text(e[contentField]) || text(e.summary) || text(e.content),\n    publication_date: toIsoDate(e[dateField] ?? e.published ?? e.updated),\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
+      },
+      "id": "b2000000-0000-4000-8000-000000000012",
+      "name": "RSS → RawItem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [120, 100]
+    },
+
+    {
+      "parameters": {
+        "url": "={{ $json.source.feed_url }}",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify($json.source.parser_config.headers || {}) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "b2000000-0000-4000-8000-000000000020",
+      "name": "Fetch API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-320, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// API lane → RawItem[]\n// Field paths come from parser_config, filled in by an admin who inspected\n// the real response. Nothing is inferred.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\n\nconst dig = (obj, path) =>\n  (path || '').split('.').filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);\n\nconst payload = $input.first().json;\nlet items = cfg.items_path ? dig(payload, cfg.items_path) : payload;\nif (!Array.isArray(items)) items = items ? [items] : [];\n\nconst toIsoDate = (raw) => {\n  if (!raw) return null;\n  const d = new Date(raw);\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nreturn items.map((it) => ({\n  json: {\n    source_id: src.id,\n    source_url: String(dig(it, cfg.url) ?? ''),\n    title_raw: String(dig(it, cfg.title) ?? ''),\n    content_raw: String(dig(it, cfg.body) ?? ''),\n    publication_date: toIsoDate(dig(it, cfg.date)),\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
+      },
+      "id": "b2000000-0000-4000-8000-000000000021",
+      "name": "API → RawItem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-100, 300]
+    },
+
+    {
+      "parameters": {
+        "url": "={{ $json.source.base_url }}",
+        "options": { "timeout": 30000, "response": { "response": { "responseFormat": "text" } } }
+      },
+      "id": "b2000000-0000-4000-8000-000000000030",
+      "name": "Fetch HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-320, 500],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "items",
+              "cssSelector": "={{ $('Called by scheduler').first().json.source.parser_config.list }}",
+              "returnArray": true,
+              "returnValue": "html"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000031",
+      "name": "Extract listing",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [-100, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// HTML lane → RawItem[]\n//\n// Selectors come from parser_config, which an admin filled in against the\n// live page during verification. A source with an empty config cannot be\n// marked verified and therefore cannot be active, so this never runs on\n// guessed selectors.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst base = new URL(src.base_url);\n\nconst blocks = $input.first().json.items || [];\n\n// Minimal extraction over the fragment HTML. Kept dependency-free: the\n// HTML node has already narrowed the document to the list items.\nconst pick = (html, selector) => {\n  if (!selector) return '';\n  const attrMatch = selector.match(/^(.*)@([\\w-]+)$/);\n  const sel = (attrMatch ? attrMatch[1] : selector).trim();\n  const attr = attrMatch ? attrMatch[2] : null;\n  const tag = sel.split(/[\\s>]/).pop().replace(/[.#].*$/, '') || 'a';\n  const re = new RegExp(`<${tag}[^>]*>([\\\\s\\\\S]*?)</${tag}>`, 'i');\n  if (attr) {\n    const attrRe = new RegExp(`<${tag}[^>]*\\\\s${attr}=[\"']([^\"']+)[\"']`, 'i');\n    const m = html.match(attrRe);\n    return m ? m[1] : '';\n  }\n  const m = html.match(re);\n  return m ? m[1].replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim() : '';\n};\n\nconst absolute = (href) => {\n  if (!href) return '';\n  try { return new URL(href, base).toString(); } catch { return ''; }\n};\n\nconst toIsoDate = (raw) => {\n  if (!raw) return null;\n  const d = new Date(raw);\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nreturn blocks.map((html) => {\n  const link = absolute(pick(html, cfg.link));\n  const pdfMatch = html.match(/href=[\"']([^\"']+\\.pdf)[\"']/i);\n  return {\n    json: {\n      source_id: src.id,\n      source_url: link,\n      title_raw: pick(html, cfg.title),\n      content_raw: pick(html, cfg.body),\n      publication_date: toIsoDate(pick(html, cfg.date)),\n      // PDF enrichment applies to every lane, not just parser_type = pdf:\n      // gazettes routinely publish a listing entry whose substance is an\n      // attached document.\n      attachments: pdfMatch ? [absolute(pdfMatch[1])] : [],\n      fetched_at: new Date().toISOString(),\n    },\n  };\n});"
+      },
+      "id": "b2000000-0000-4000-8000-000000000032",
+      "name": "HTML → RawItem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [120, 500]
+    },
+
+    {
+      "parameters": {
+        "url": "={{ $json.source.base_url }}",
+        "options": { "timeout": 30000, "response": { "response": { "responseFormat": "text" } } }
+      },
+      "id": "b2000000-0000-4000-8000-000000000040",
+      "name": "Fetch PDF index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-320, 700],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// PDF-index lane → RawItem[]\n//\n// The page is a list of PDF links, typical of official gazettes. Each link\n// becomes a RawItem carrying the document as an attachment; the download and\n// text extraction happen in the enrichment step so every lane shares one\n// implementation.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst base = new URL(src.base_url);\nconst maxPages = Number(cfg.max_pages) || 40;\n\nconst html = typeof $input.first().json.data === 'string'\n  ? $input.first().json.data\n  : ($input.first().json.body ?? '');\n\nconst links = [...html.matchAll(/href=[\"']([^\"']+\\.pdf)[\"'][^>]*>([\\s\\S]*?)</gi)]\n  .slice(0, maxPages)\n  .map((m) => ({\n    href: (() => { try { return new URL(m[1], base).toString(); } catch { return ''; } })(),\n    label: m[2].replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim(),\n  }))\n  .filter((l) => l.href);\n\nreturn links.map((l) => ({\n  json: {\n    source_id: src.id,\n    source_url: l.href,\n    title_raw: l.label,\n    content_raw: '',\n    // The gazette listing rarely states a publication date; leave it null and\n    // let the AI read it from the document rather than inventing one here.\n    publication_date: null,\n    attachments: [l.href],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
+      },
+      "id": "b2000000-0000-4000-8000-000000000041",
+      "name": "PDF index → RawItem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-100, 700]
+    },
+
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "id": "b2000000-0000-4000-8000-000000000050",
+      "name": "Merge lanes",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [360, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalises and validates every RawItem before anything downstream sees it.\n//\n// This is the single contract between parsing and the M9 AI stage: whatever\n// lane produced an item, it leaves here in the same shape or not at all.\n\nconst src = $('Called by scheduler').first().json.source;\nconst allowed = (src.allowed_domains || []).map((d) => String(d).toLowerCase());\n\nconst out = [];\nconst rejected = { no_url: 0, no_title: 0, domain_mismatch: 0 };\n\nfor (const item of $input.all()) {\n  const r = item.json;\n\n  if (!r.source_url) { rejected.no_url += 1; continue; }\n  if (!r.title_raw || !String(r.title_raw).trim()) { rejected.no_title += 1; continue; }\n\n  // Domain check happens here as well as in the Publishing Gate (M9). An item\n  // whose URL is off the source's allow-list is not worth spending an AI call\n  // on, and it must never be attributed to this authority.\n  let host;\n  try { host = new URL(r.source_url).hostname.toLowerCase(); } catch { rejected.no_url += 1; continue; }\n  if (!allowed.includes(host)) { rejected.domain_mismatch += 1; continue; }\n\n  out.push({\n    json: {\n      source_id: src.id,\n      source_url: r.source_url,\n      title_raw: String(r.title_raw).trim().slice(0, 2000),\n      content_raw: String(r.content_raw || '').trim().slice(0, 50000),\n      publication_date: r.publication_date || null,\n      attachments: Array.isArray(r.attachments) ? r.attachments.slice(0, 5) : [],\n      fetched_at: r.fetched_at || new Date().toISOString(),\n      // carried through so M9 can log against the right source\n      source: {\n        id: src.id,\n        country: src.country,\n        authority_ar: src.authority_ar,\n        allowed_domains: src.allowed_domains,\n      },\n    },\n  });\n}\n\nconsole.log(`normalised ${out.length} items; rejected ${JSON.stringify(rejected)}`);\n\n// M9 attaches the AI stage and the Publishing Gate to this output.\nreturn out;"
+      },
+      "id": "b2000000-0000-4000-8000-000000000051",
+      "name": "Normalise RawItem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [580, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fetch failure for this source.\n//\n// Isolated on purpose: one unreachable source must not stop the others in the\n// same scheduler tick. M10 turns this into retry state and a health snapshot;\n// for now it records the failure and ends this source's run.\n\nconst src = $('Called by scheduler').first().json.source;\nconst err = $input.first().json.error || $input.first().json;\n\nreturn [{\n  json: {\n    failed: true,\n    source_id: src.id,\n    authority_ar: src.authority_ar,\n    error_message: String(err?.message || err?.reason || 'fetch failed').slice(0, 1000),\n  },\n}];"
+      },
+      "id": "b2000000-0000-4000-8000-000000000060",
+      "name": "Record fetch failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [120, 900]
+    }
+  ],
+  "connections": {
+    "Called by scheduler": {
+      "main": [[{ "node": "Parser router", "type": "main", "index": 0 }]]
+    },
+    "Parser router": {
+      "main": [
+        [{ "node": "Fetch RSS", "type": "main", "index": 0 }],
+        [{ "node": "Fetch API", "type": "main", "index": 0 }],
+        [{ "node": "Fetch HTML", "type": "main", "index": 0 }],
+        [{ "node": "Fetch PDF index", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch RSS": {
+      "main": [
+        [{ "node": "Parse XML", "type": "main", "index": 0 }],
+        [{ "node": "Record fetch failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse XML": {
+      "main": [[{ "node": "RSS → RawItem", "type": "main", "index": 0 }]]
+    },
+    "RSS → RawItem": {
+      "main": [[{ "node": "Merge lanes", "type": "main", "index": 0 }]]
+    },
+    "Fetch API": {
+      "main": [
+        [{ "node": "API → RawItem", "type": "main", "index": 0 }],
+        [{ "node": "Record fetch failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "API → RawItem": {
+      "main": [[{ "node": "Merge lanes", "type": "main", "index": 1 }]]
+    },
+    "Fetch HTML": {
+      "main": [
+        [{ "node": "Extract listing", "type": "main", "index": 0 }],
+        [{ "node": "Record fetch failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract listing": {
+      "main": [[{ "node": "HTML → RawItem", "type": "main", "index": 0 }]]
+    },
+    "HTML → RawItem": {
+      "main": [[{ "node": "Merge lanes", "type": "main", "index": 2 }]]
+    },
+    "Fetch PDF index": {
+      "main": [
+        [{ "node": "PDF index → RawItem", "type": "main", "index": 0 }],
+        [{ "node": "Record fetch failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "PDF index → RawItem": {
+      "main": [[{ "node": "Merge lanes", "type": "main", "index": 3 }]]
+    },
+    "Merge lanes": {
+      "main": [[{ "node": "Normalise RawItem", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "tags": [{ "name": "legal-intelligence" }]
+}
