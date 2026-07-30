@@ -83,7 +83,9 @@ lib/
   constants/        country and taxonomy registries, Arabic labels
   env.ts            validated server environment (server-only)
   utils.ts          shared helpers
-supabase/migrations/  ordered SQL — integrity constraints only
+supabase/
+  migrations/         ordered SQL — integrity constraints only
+  tests/              local verification suite (40 assertions)
 n8n/workflows/        importable workflow JSON
 docs/                 implementation plan and runbooks
 ```
@@ -99,8 +101,8 @@ means changing all three together.
 | Milestone | Status |
 |---|---|
 | M1 Project foundation | ✅ complete |
-| M2 Database schema | ⬜ next |
-| M3 Source registry | ⬜ |
+| M2 Database schema | ✅ complete |
+| M3 Source registry | ⬜ next |
 | M4 Auth + app shell | ⬜ |
 | M5 Internal legal archive | ⬜ |
 | M6 Dashboard + health | ⬜ |
