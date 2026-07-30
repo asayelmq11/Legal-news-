@@ -66,14 +66,14 @@ end $$;
 \echo '── R4. viewer CANNOT write the archive ─────────────────────────────────'
 do $$
 declare src uuid; begin
-  select id into src from public.sources limit 1;
+  select id into src from public.sources where authority_en='ZZ Test Fixture Authority';
   set local role authenticated;
   set local request.jwt.claim.sub = 'bbbbbbbb-0000-0000-0000-000000000002';
   begin
     insert into public.legal_updates (source_id, content_hash, source_url, title_ar,
       summary_ar, country, category, document_type, legal_status, is_legal_update,
       confidence, publication_date, raw_excerpt, ai_model)
-    values (src, repeat('f',64), 'https://zatca.gov.sa/x','ع','ع','SA','tax','circular',
+    values (src, repeat('f',64), 'https://fixture.invalid/x','ع','ع','SA','tax','circular',
             'enacted', true, 0.99, current_date, 'ع', 'forged');
     reset role;
     raise exception 'SEAL BREACH: viewer inserted into legal_updates';
@@ -86,14 +86,14 @@ end $$;
 \echo '── R5. ADMIN also cannot write the archive (n8n-only, by design) ───────'
 do $$
 declare src uuid; begin
-  select id into src from public.sources limit 1;
+  select id into src from public.sources where authority_en='ZZ Test Fixture Authority';
   set local role authenticated;
   set local request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000001';
   begin
     insert into public.legal_updates (source_id, content_hash, source_url, title_ar,
       summary_ar, country, category, document_type, legal_status, is_legal_update,
       confidence, publication_date, raw_excerpt, ai_model)
-    values (src, repeat('9',64), 'https://zatca.gov.sa/x','ع','ع','SA','tax','circular',
+    values (src, repeat('9',64), 'https://fixture.invalid/x','ع','ع','SA','tax','circular',
             'enacted', true, 0.99, current_date, 'ع', 'forged');
     reset role;
     raise exception 'SEAL BREACH: admin inserted into legal_updates';
@@ -159,8 +159,8 @@ declare n int; begin
   begin
     insert into public.sources (country, authority_ar, authority_en, source_type,
       base_url, parser_type, allowed_domains, priority)
-    values ('SA','مصدر مزيف','Fake','government','https://fake.gov.sa','html',
-            array['fake.gov.sa'], 1);
+    values ('SA','مصدر مزيف','Fake','government','https://fixture-fake.invalid','html',
+            array['fixture-fake.invalid'], 1);
     reset role;
     raise exception 'viewer created a source';
   exception when insufficient_privilege or check_violation then
@@ -179,8 +179,8 @@ declare n int; begin
   set local request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000001';
   insert into public.sources (country, authority_ar, authority_en, source_type,
     base_url, parser_type, allowed_domains, priority)
-  values ('AE','وزارة العدل','Ministry of Justice','government',
-          'https://moj.gov.ae','html', array['moj.gov.ae'], 2);
+  values ('AE','مصدر اختبار للصلاحيات','ZZ Test Fixture Admin Created','government',
+          'https://fixture-moj.invalid','unknown', array['fixture-moj.invalid'], 2);
   get diagnostics n = row_count;
   reset role;
   if n <> 1 then raise exception 'admin could not create a source'; end if;
@@ -295,13 +295,13 @@ end $$;
 \echo '── R14. service_role (n8n) can write everything ────────────────────────'
 do $$
 declare src uuid; n int; begin
-  select id into src from public.sources limit 1;
+  select id into src from public.sources where authority_en='ZZ Test Fixture Authority';
   set local role service_role;
 
   insert into public.legal_updates (source_id, content_hash, source_url, title_ar,
     summary_ar, country, category, document_type, legal_status, is_legal_update,
     confidence, publication_date, raw_excerpt, ai_model)
-  values (src, repeat('1',64), 'https://zatca.gov.sa/n8n','عنوان من n8n','ملخص','SA',
+  values (src, repeat('1',64), 'https://fixture.invalid/n8n','عنوان من n8n','ملخص','SA',
           'tax','circular','enacted', true, 0.96, current_date, 'نص', 'claude');
 
   insert into public.workflow_logs (workflow_name, trigger_type, status, source_id,

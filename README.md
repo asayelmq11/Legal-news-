@@ -85,7 +85,7 @@ lib/
   utils.ts          shared helpers
 supabase/
   migrations/         ordered SQL — integrity constraints only
-  tests/              local verification suite (40 assertions)
+  tests/              local verification suite (57 assertions)
 n8n/workflows/        importable workflow JSON
 docs/                 implementation plan and runbooks
 ```
@@ -102,8 +102,8 @@ means changing all three together.
 |---|---|
 | M1 Project foundation | ✅ complete |
 | M2 Database schema | ✅ complete |
-| M3 Source registry | ⬜ next |
-| M4 Auth + app shell | ⬜ |
+| M3 Source registry | ✅ complete |
+| M4 Auth + app shell | ⬜ next |
 | M5 Internal legal archive | ⬜ |
 | M6 Dashboard + health | ⬜ |
 | M7 Admin: sources / users / settings | ⬜ |

@@ -43,6 +43,13 @@ for f in "$MIGRATIONS"/*.sql; do
 done
 echo "   ✓ all migrations applied twice with no error"
 
+# Registry checks run FIRST, against the pristine seeded state — the later
+# suites insert fixture rows, and the registry assertions are about what the
+# seed actually contains.
+echo
+echo "▶ source registry checks"
+psql_su -q -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/03_source_registry_checks.sql"
+
 echo
 echo "▶ schema checks"
 psql_su -q -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/01_schema_checks.sql"

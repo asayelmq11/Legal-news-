@@ -1,0 +1,24 @@
+-- =============================================================================
+-- 0007 — parser_type gains 'unknown'
+--
+-- Represents "the parser for this source has not been determined yet". It is
+-- the honest alternative to guessing selectors: a registry entry can record a
+-- real authority, its official domain and its priority while stating plainly
+-- that nobody has yet verified how to read it.
+--
+-- Sources carrying 'unknown' can never run — 0008 forbids an active source
+-- from being in pending_verification, and the scheduler's index is partial on
+-- `active`.
+--
+-- ┌─ WHY THIS IS A FILE OF ITS OWN ────────────────────────────────────────────┐
+-- │ Postgres refuses to use a new enum value in the transaction that added it: │
+-- │                                                                            │
+-- │   ERROR: unsafe use of new value "unknown" of enum type parser_type        │
+-- │   HINT:  New enum values must be committed before they can be used.        │
+-- │                                                                            │
+-- │ The seed in 0009 uses this value, so the ALTER must commit first. Keep it  │
+-- │ alone in this migration — do not merge it into a neighbouring file.        │
+-- └────────────────────────────────────────────────────────────────────────────┘
+-- =============================================================================
+
+alter type public.parser_type add value if not exists 'unknown';

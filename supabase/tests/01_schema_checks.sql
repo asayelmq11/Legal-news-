@@ -181,16 +181,16 @@ do $$
 declare src uuid; begin
   insert into public.sources (country, authority_ar, authority_en, source_type,
                               base_url, parser_type, feed_url, allowed_domains, priority)
-  values ('SA','هيئة الزكاة والضريبة والجمارك','ZATCA','regulator',
-          'https://zatca.gov.sa','rss','https://zatca.gov.sa/rss',
-          array['zatca.gov.sa'], 1)
+  values ('SA','مصدر اختبار','ZZ Test Fixture Authority','government',
+          'https://fixture.invalid','rss','https://fixture.invalid/feed',
+          array['fixture.invalid'], 5)
   returning id into src;
 
   -- priority out of range
   begin
     insert into public.sources (country, authority_ar, authority_en, source_type,
                                 base_url, parser_type, allowed_domains, priority)
-    values ('SA','x','x','government','https://x.gov.sa','html',array['x.gov.sa'], 9);
+    values ('SA','x','x','government','https://fixture-x.invalid','html',array['fixture-x.invalid'], 9);
     raise exception 'priority 9 should be rejected';
   exception when check_violation then null; end;
 
@@ -198,7 +198,7 @@ declare src uuid; begin
   begin
     insert into public.sources (country, authority_ar, authority_en, source_type,
                                 base_url, parser_type, allowed_domains, priority)
-    values ('SA','x','x','government','https://x.gov.sa','rss',array['x.gov.sa'], 1);
+    values ('SA','x','x','government','https://fixture-x.invalid','rss',array['fixture-x.invalid'], 1);
     raise exception 'rss source without feed_url should be rejected';
   exception when check_violation then null; end;
 
@@ -206,7 +206,7 @@ declare src uuid; begin
   begin
     insert into public.sources (country, authority_ar, authority_en, source_type,
                                 base_url, parser_type, allowed_domains, priority)
-    values ('SA','x','x','government','https://x.gov.sa','html',array['X.GOV.SA'], 1);
+    values ('SA','x','x','government','https://fixture-x.invalid','html',array['X.GOV.SA'], 1);
     raise exception 'uppercase domain should be rejected';
   exception when check_violation then null; end;
 
@@ -214,7 +214,7 @@ declare src uuid; begin
   begin
     insert into public.sources (country, authority_ar, authority_en, source_type,
                                 base_url, parser_type, allowed_domains, priority)
-    values ('SA','x','x','government','https://x.gov.sa','html', array[]::text[], 1);
+    values ('SA','x','x','government','https://fixture-x.invalid','html', array[]::text[], 1);
     raise exception 'empty allowed_domains should be rejected';
   exception when check_violation then null; end;
 
@@ -222,7 +222,7 @@ declare src uuid; begin
   begin
     insert into public.sources (country, authority_ar, authority_en, source_type,
                                 base_url, parser_type, allowed_domains, priority)
-    values ('SA','x','x','government','ftp://x.gov.sa','html',array['x.gov.sa'], 1);
+    values ('SA','x','x','government','ftp://fixture-x.invalid','html',array['fixture-x.invalid'], 1);
     raise exception 'ftp base_url should be rejected';
   exception when check_violation then null; end;
 
@@ -231,7 +231,7 @@ declare src uuid; begin
     insert into public.legal_updates (source_id, content_hash, source_url, title_ar,
       summary_ar, country, category, document_type, legal_status, is_legal_update,
       confidence, publication_date, raw_excerpt, ai_model)
-    values (src, repeat('a',64), 'https://zatca.gov.sa/x','ع','ع','SA','tax','circular',
+    values (src, repeat('a',64), 'https://fixture.invalid/x','ع','ع','SA','tax','circular',
             'enacted', true, 1.5, current_date, 'ع', 'test');
     raise exception 'confidence 1.5 should be rejected';
   exception when check_violation then null; end;
@@ -241,7 +241,7 @@ declare src uuid; begin
     insert into public.legal_updates (source_id, content_hash, source_url, title_ar,
       summary_ar, country, category, document_type, legal_status, is_legal_update,
       confidence, publication_date, raw_excerpt, ai_model)
-    values (src, 'not-a-sha256', 'https://zatca.gov.sa/x','ع','ع','SA','tax','circular',
+    values (src, 'not-a-sha256', 'https://fixture.invalid/x','ع','ع','SA','tax','circular',
             'enacted', true, 0.95, current_date, 'ع', 'test');
     raise exception 'malformed hash should be rejected';
   exception when check_violation then null; end;
@@ -251,7 +251,7 @@ declare src uuid; begin
     insert into public.legal_updates (source_id, content_hash, source_url, title_ar,
       summary_ar, country, category, document_type, legal_status, is_legal_update,
       confidence, publication_date, raw_excerpt, ai_model)
-    values (src, repeat('b',64), 'https://zatca.gov.sa/x','   ','ع','SA','tax','circular',
+    values (src, repeat('b',64), 'https://fixture.invalid/x','   ','ع','SA','tax','circular',
             'enacted', true, 0.95, current_date, 'ع', 'test');
     raise exception 'blank title should be rejected';
   exception when check_violation then null; end;
@@ -262,11 +262,11 @@ end $$;
 \echo '── 12. a LOW-confidence row is still storable (rule lives in n8n) ──────'
 do $$
 declare src uuid; begin
-  select id into src from public.sources limit 1;
+  select id into src from public.sources where authority_en='ZZ Test Fixture Authority';
   insert into public.legal_updates (source_id, content_hash, source_url, title_ar,
     summary_ar, country, category, document_type, legal_status, is_legal_update,
     confidence, publication_date, raw_excerpt, ai_model)
-  values (src, repeat('c',64), 'https://zatca.gov.sa/low','عنوان','ملخص','SA','tax',
+  values (src, repeat('c',64), 'https://fixture.invalid/low','عنوان','ملخص','SA','tax',
           'circular','enacted', true, 0.10, current_date, 'نص', 'test');
 
   raise notice 'PASS — confidence 0.10 accepted by the DB; the >=0.90 gate is n8n''s job, exactly as specified';
@@ -276,17 +276,17 @@ end $$;
 \echo '── 13. duplicate content_hash blocked by UNIQUE ────────────────────────'
 do $$
 declare src uuid; begin
-  select id into src from public.sources limit 1;
+  select id into src from public.sources where authority_en='ZZ Test Fixture Authority';
   insert into public.legal_updates (source_id, content_hash, source_url, title_ar,
     summary_ar, country, category, document_type, legal_status, is_legal_update,
     confidence, publication_date, raw_excerpt, ai_model)
-  values (src, repeat('d',64), 'https://zatca.gov.sa/1','عنوان','ملخص','SA','tax',
+  values (src, repeat('d',64), 'https://fixture.invalid/1','عنوان','ملخص','SA','tax',
           'circular','enacted', true, 0.95, current_date, 'نص', 'test');
   begin
     insert into public.legal_updates (source_id, content_hash, source_url, title_ar,
       summary_ar, country, category, document_type, legal_status, is_legal_update,
       confidence, publication_date, raw_excerpt, ai_model)
-    values (src, repeat('d',64), 'https://zatca.gov.sa/2','عنوان آخر','ملخص','SA','tax',
+    values (src, repeat('d',64), 'https://fixture.invalid/2','عنوان آخر','ملخص','SA','tax',
             'circular','enacted', true, 0.95, current_date, 'نص', 'test');
     raise exception 'duplicate content_hash should be rejected';
   exception when unique_violation then
@@ -297,7 +297,7 @@ end $$;
 \echo '── 14. archive protects provenance: source delete is RESTRICTed ────────'
 do $$
 declare src uuid; begin
-  select id into src from public.sources limit 1;
+  select id into src from public.sources where authority_en='ZZ Test Fixture Authority';
   begin
     delete from public.sources where id = src;
     raise exception 'deleting a source with archived updates should be blocked';
@@ -309,12 +309,12 @@ end $$;
 \echo '── 15. Arabic search vector: orthographic variants match ───────────────'
 do $$
 declare src uuid; hits int; begin
-  select id into src from public.sources limit 1;
+  select id into src from public.sources where authority_en='ZZ Test Fixture Authority';
 
   insert into public.legal_updates (source_id, content_hash, source_url, title_ar,
     summary_ar, country, category, document_type, legal_status, is_legal_update,
     confidence, publication_date, raw_excerpt, ai_model, keywords)
-  values (src, repeat('e',64), 'https://zatca.gov.sa/vat',
+  values (src, repeat('e',64), 'https://fixture.invalid/vat',
           'تعديل أحكام اللائحة التنفيذية لنظام ضريبة القيمة المضافة',
           'صدر قرار بتعديل أحكام اللائحه التنفيذيه',
           'SA','tax','executive_regulation','amended', true, 0.97, current_date,

@@ -2,6 +2,9 @@
 
 Six tables, one access-control function, zero triggers, zero business logic.
 
+Source registry contents and the activation procedure are in
+[`SOURCE_REGISTRY.md`](SOURCE_REGISTRY.md).
+
 ```
 migrations/
   0001_extensions.sql       extensions schema + pg_trgm
@@ -10,10 +13,14 @@ migrations/
   0004_indexes.sql          28 indexes
   0005_access_control.sql   role predicate, RLS policies, grants, REVOKEs
   0006_seed_app_settings.sql  10 operational defaults, idempotent
+  0007_parser_type_unknown.sql  adds parser_type 'unknown' (must stay alone)
+  0008_source_config_status.sql config_status + registry integrity
+  0009_seed_sources.sql       52 trusted sources, all pending verification
 tests/
   00_bootstrap_local.sql    LOCAL ONLY — stubs auth schema + roles
   01_schema_checks.sql      structure, constraints, Arabic search
   02_rls_checks.sql         access control as each role
+  03_source_registry_checks.sql  registry validation (see SOURCE_REGISTRY.md)
   run_local_checks.sh       applies everything and runs both suites
 ```
 
@@ -38,7 +45,7 @@ for why Postgres RLS leaves no alternative.
 ## Local verification
 
 Requires a running Postgres (tested on 16.13) and permission to create
-databases. Applies every migration twice, then runs 40 assertions.
+databases. Applies every migration twice, then runs 57 assertions.
 
 ```bash
 supabase/tests/run_local_checks.sh
@@ -203,7 +210,7 @@ partial-word and fuzzy matching that full-text search misses.
 
 ## Verified locally
 
-40 assertions, all passing against Postgres 16.13:
+57 assertions, all passing against Postgres 16.13:
 
 - six tables exactly; no triggers; exactly one function
 - RLS enabled on all six tables
