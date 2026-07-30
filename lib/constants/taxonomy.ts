@@ -13,7 +13,12 @@ export const SOURCE_TYPES = [
 ] as const
 export type SourceType = (typeof SOURCE_TYPES)[number]
 
-export const PARSER_TYPES = ['rss', 'html', 'api', 'pdf'] as const
+/**
+ * Includes 'unknown', added to the Postgres enum in migration 0007. It means
+ * "the parser has not been determined yet" and is set by the system, never
+ * chosen by an admin — a source carrying it can never be activated.
+ */
+export const PARSER_TYPES = ['rss', 'html', 'api', 'pdf', 'unknown'] as const
 export type ParserType = (typeof PARSER_TYPES)[number]
 
 export const DOCUMENT_TYPES = [

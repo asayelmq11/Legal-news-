@@ -209,6 +209,7 @@ export type Database = {
           config_status: Database['public']['Enums']['config_status']
           exclusion_group: string | null
           requires_authority_check: boolean
+          updated_by: string | null
         }
         Insert: {
           id?: string
@@ -243,6 +244,7 @@ export type Database = {
           config_status?: Database['public']['Enums']['config_status']
           exclusion_group?: string | null
           requires_authority_check?: boolean
+          updated_by?: string | null
         }
         Update: {
           id?: string
@@ -277,8 +279,17 @@ export type Database = {
           config_status?: Database['public']['Enums']['config_status']
           exclusion_group?: string | null
           requires_authority_check?: boolean
+          updated_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'sources_updated_by_fkey'
+            columns: ['updated_by']
+            isOneToOne: false
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
+        ]
       }
       users: {
         Row: {
