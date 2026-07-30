@@ -1,0 +1,63 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens. A restrained, high-contrast palette suited to a legal archive
+ * that people read for long stretches — not a marketing surface.
+ */
+@theme {
+  --color-surface: oklch(99% 0.002 260);
+  --color-surface-raised: oklch(100% 0 0);
+  --color-surface-sunken: oklch(96.5% 0.004 260);
+  --color-border: oklch(90% 0.006 260);
+  --color-border-strong: oklch(82% 0.008 260);
+
+  --color-ink: oklch(24% 0.012 260);
+  --color-ink-muted: oklch(48% 0.012 260);
+  --color-ink-subtle: oklch(62% 0.01 260);
+
+  --color-brand: oklch(42% 0.09 245);
+  --color-brand-hover: oklch(36% 0.095 245);
+  --color-brand-subtle: oklch(95% 0.02 245);
+
+  /* Health and status signalling. */
+  --color-ok: oklch(52% 0.11 155);
+  --color-ok-subtle: oklch(95% 0.04 155);
+  --color-warn: oklch(62% 0.13 75);
+  --color-warn-subtle: oklch(96% 0.05 75);
+  --color-danger: oklch(52% 0.17 26);
+  --color-danger-subtle: oklch(96% 0.03 26);
+
+  --font-sans: 'IBM Plex Sans Arabic', 'Noto Sans Arabic', 'Segoe UI', system-ui, sans-serif;
+
+  --radius-card: 0.625rem;
+}
+
+@layer base {
+  html {
+    /* Arabic numerals in an Arabic legal context are conventionally Western. */
+    font-variant-numeric: lining-nums tabular-nums;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    line-height: 1.7;
+    text-rendering: optimizeLegibility;
+  }
+
+  /*
+   * Logical properties throughout, so the single `dir="rtl"` on <html> is the
+   * only place direction is declared. Nothing downstream hardcodes left/right.
+   */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-brand-subtle);
+  }
+}

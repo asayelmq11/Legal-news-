@@ -216,11 +216,50 @@ updated_at  timestamptz
 updated_by  uuid references users(id)
 ```
 
-Key/value rather than columns, so adding a setting never needs a migration. Seeded
-with: newsletter recipients, newsletter send day, AI confidence threshold, retry
-backoff schedule, priority→interval map. n8n **reads** these; the thresholds live in
-n8n's decision nodes and are merely *parameterised* from here, so an admin can tune a
-number without editing a workflow.
+Key/value rather than columns, so adding a setting never needs a migration. n8n
+**reads** these; the thresholds live in n8n's decision nodes and are merely
+*parameterised* from here, so an admin can tune a number without editing a workflow.
+
+#### Setting registry (validated keys only)
+
+Arbitrary keys are not accepted from the UI. A single registry in
+`lib/settings/registry.ts` defines every known key, its Zod schema, its default, and
+whether it is security-critical. The UI renders from the registry, the Server Action
+validates against it, and `app_settings` carries a
+`CHECK (key = lower(key) AND key ~ '^[a-z][a-z0-9_.]*$')` shape constraint.
+
+| Key | Value shape | Default | Missing → |
+|---|---|---|---|
+| `ai.confidence_threshold` | `number` 0–1 | `0.90` | **fail closed** |
+| `ingestion.failure_alert_threshold` | `int >= 1` | `5` | fallback |
+| `ingestion.priority_intervals` | `Record<"1".."5", int minutes>` | `{1:60,2:180,3:360,4:720,5:1440}` | fallback |
+| `ingestion.retry_backoff_minutes` | `int[]` ascending | `[5,15,45,120,360]` | fallback |
+| `health.stale_after_minutes` | `int >= 1` | `1440` | fallback |
+| `health.empty_run_threshold` | `int >= 1` | `3` | fallback |
+| `newsletter.enabled` | `boolean` | `false` | fallback (`false`) |
+| `newsletter.recipients` | `string[]` of emails | `[]` | **fail closed** |
+| `newsletter.schedule` | `{ day: 0-6, hour: 0-23 }` | `{day:0,hour:7}` | fallback |
+| `app.timezone` | IANA tz string | `Asia/Riyadh` | fallback |
+
+**Fail-closed vs fallback.** A missing non-critical setting resolves to its registry
+default. Two are security-sensitive and must never silently fall back:
+
+- `ai.confidence_threshold` — a fallback here could quietly widen what gets published.
+  If absent or malformed, the Publishing Gate rejects every item and raises an alert
+  rather than assuming a threshold.
+- `newsletter.recipients` — a fallback could send legal content to the wrong list.
+  If absent or empty, the newsletter run aborts and logs `failed`.
+
+**No secrets, ever.** `app_settings` holds operational values only. API keys, tokens,
+passwords, private keys, and webhook secrets live in n8n Credentials, environment
+variables, or the deployment secret manager. This is enforced three ways: the registry
+is a closed allow-list with no credential-shaped key in it; the Server Action rejects
+any key absent from the registry; and M12 adds a check that fails on
+secret-shaped key names. The table is also admin-only for read, so it is not a
+disclosure surface even if misused.
+
+Every write records `updated_by` (the acting admin) and `updated_at`. Writes go
+through the Server Action only — never a direct client-side update.
 
 ### RLS and grants
 
@@ -231,7 +270,10 @@ number without editing a workflow.
 | `newsletter_history` | — | SELECT | SELECT | full |
 | `sources` | — | SELECT | SELECT INSERT UPDATE DELETE | full |
 | `users` | — | SELECT self | full | full |
-| `app_settings` | — | SELECT | SELECT UPDATE | full |
+| `app_settings` | — | **none** | SELECT UPDATE | full |
+
+`app_settings` is admin-only for **read as well as write** — a viewer has no policy
+granting SELECT, so the table is invisible to them.
 
 Write-sealing is enforced twice, belt and braces:
 
@@ -521,13 +563,10 @@ a commit, and a push. No milestone starts before the previous one is confirmed.
 | 6 | Priority scheduling | Hourly dispatcher, 1h/3h/6h/12h/24h tiers, per-source override, map stored in `app_settings`. |
 | 7 | Manual execution | Signed n8n webhook + admin-guarded Server Action for source / country / all scope. |
 
-**One deviation to confirm:** directive 2 names *settings* as an admin-managed area,
-which requires an `app_settings` table — a sixth table against the original "five
-tables" instruction. I judged it worth it: it is also where newsletter recipients,
-the confidence threshold, the backoff schedule, and the priority→interval map now
-live, which removes four hardcoded values from workflow JSON and makes them tunable
-without a redeploy. Say the word if you would rather keep five tables and hold those
-values in n8n environment variables instead.
+**Deviation approved.** `app_settings` is confirmed as the sixth table, on the grounds
+that these are operational values that must be adjustable without editing workflow
+JSON or redeploying. The schema is now fixed at **six tables**; no further table is
+added without explicit approval.
 
 ---
 
