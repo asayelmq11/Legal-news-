@@ -70,6 +70,10 @@ echo "▶ archive query checks"
 psql_su -q -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/04_archive_query_checks.sql"
 
 echo
+echo "▶ dashboard aggregation checks"
+psql_su -q -v ON_ERROR_STOP=1 -d "$DB" -f "$HERE/05_dashboard_checks.sql"
+
+echo
 echo "▶ Arabic normalisation parity (TypeScript vs Postgres)"
 if command -v node >/dev/null 2>&1; then
   PGPW="${PGPASSWORD:-postgres}"

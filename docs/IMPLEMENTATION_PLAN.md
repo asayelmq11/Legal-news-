@@ -711,7 +711,49 @@ so the limitation is a known decision rather than an assumption.
 
 ---
 
-## 18. Non-goals
+## 19. Dashboard aggregation — why bucketed counts, not SQL aggregates
+
+The dashboard computes every archive metric with PostgREST
+`head: true, count: 'exact'` requests. The response body is empty; the number
+arrives in the `Content-Range` header. **No archive row is transferred to
+compute any metric**, however large the archive grows.
+
+Three approaches were considered:
+
+| Approach | Rejected because |
+|---|---|
+| Fetch dimension columns and tally in JavaScript | O(N) rows over the wire. Fine at 50 rows, ruinous at 50,000 — and correctness would silently depend on archive size. |
+| A Postgres function or view returning aggregates | Explicitly out of scope: no new functions, no new schema objects. |
+| PostgREST aggregate functions (`select=country,count()`) | **Disabled by default on Supabase.** Requires `ALTER ROLE authenticator SET pgrst.db_aggregates_enabled = 'true'` plus a config reload. A dashboard that breaks unless someone remembers a role setting is a worse failure mode than extra round trips. |
+
+**Chosen:** one `head` count per bucket, issued concurrently.
+
+- ~54 requests per dashboard load: 1 total + 7 countries + 18 categories +
+  6 statuses + 10 document types + 12 months.
+- They run in parallel, so wall-clock is roughly one round trip, not fifty-four.
+- Each is an index-only count served by the composite indexes from migrations
+  0004 and 0012 — verified by check D1, which fails if any dimension count
+  falls back to a sequential scan.
+- Empty buckets are dropped rather than rendered as zeros.
+
+**If this ever becomes unattractive**, enabling `db_aggregates_enabled` collapses
+it to about five requests with no schema change and no migration — a
+configuration decision, not a rewrite. Recorded here so the option is known
+rather than rediscovered.
+
+### Role separation on the dashboard
+
+`getOperationalOverview()` is called only inside an `isAdmin` branch, so for a
+viewer the operational query is **never issued** — source health, workflow
+failures and newsletter delivery never leave the database.
+
+As documented in §17, this is application-level separation. RLS permits a viewer
+to read `workflow_logs` and `sources`; check D7 asserts that plainly rather than
+implying a database-level control that does not exist.
+
+---
+
+## 20. Non-goals
 
 Explicitly out of scope and will not appear in the codebase: public pages, SEO,
 registration, comments, reactions, multi-tenancy, billing, GraphQL, microservices,

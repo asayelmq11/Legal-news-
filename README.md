@@ -49,7 +49,7 @@ npm run dev
 | `npm run build` | Production build (fails on type errors) |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | vitest — 116 assertions across auth, guards, Arabic search, filters, links |
+| `npm run test` | vitest — 131 assertions across auth, guards, Arabic search, filters, links, dashboard |
 | `npm run verify` | typecheck → lint → test → build. **This is what CI runs.** |
 | `npm run db:check` | applies all migrations to a scratch Postgres and runs 61 SQL assertions |
 | `npm run db:types` | regenerates `types/database.ts` from a live schema |
@@ -104,7 +104,7 @@ types/database.ts   GENERATED from the live schema
 supabase/
   migrations/         ordered SQL — integrity constraints only
   fixtures/           dev-only fake data — NEVER applied to production
-  tests/              SQL verification suite (71 assertions)
+  tests/              SQL verification suite (78 assertions)
 n8n/workflows/        importable workflow JSON
 docs/                 implementation plan and runbooks
 ```
@@ -124,8 +124,8 @@ means changing all three together.
 | M3 Source registry | ✅ complete |
 | M4 Auth + app shell | ✅ complete |
 | M5 Internal legal archive | ✅ complete |
-| M6 Dashboard + health | ⬜ next |
-| M7 Admin: sources / users / settings | ⬜ |
+| M6 Dashboard + health | ✅ complete |
+| M7 Admin: sources / users / settings | ⬜ next |
 | M7.5 Egress verification (blocks M8) | ⬜ |
 | M8 n8n: scheduler + parsers | ⬜ |
 | M9 n8n: AI + publishing gate | ⬜ |
