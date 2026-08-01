@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+import { authDebug, countSessionCookies } from '@/lib/auth/debug'
 import type { Database } from '@/types/database'
 
 /** Routes reachable without a session. Everything else requires one. */
@@ -112,6 +113,15 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   const user = data.user
 
   const { pathname, search } = request.nextUrl
+
+  authDebug('proxy', {
+    method: request.method,
+    path: pathname,
+    // Counts only — never the cookie names or their contents.
+    sessionCookiesIn: countSessionCookies(request.cookies.getAll()),
+    sessionResolved: Boolean(user),
+    authError: error?.name ?? null,
+  })
 
   /*
    * Supabase could not be reached. Do not redirect: that would discard a valid

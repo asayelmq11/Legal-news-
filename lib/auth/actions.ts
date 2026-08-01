@@ -2,8 +2,10 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { cookies } from 'next/headers'
 import { z } from 'zod'
 
+import { authDebug, countSessionCookies } from '@/lib/auth/debug'
 import { createClient } from '@/lib/supabase/server'
 
 export type LoginState = { error: string | null }
@@ -56,7 +58,36 @@ export async function signIn(_prev: LoginState, formData: FormData): Promise<Log
      * "wrong password" would let anyone enumerate who works in the Legal
      * Department.
      */
+    authDebug('signIn', { authOk: false })
     return { error: 'بيانات الدخول غير صحيحة' }
+  }
+
+  /*
+   * Supabase saying "these credentials are valid" is NOT the same as the user
+   * being signed in. What signs a user in is the session cookie reaching the
+   * browser, and that is a separate step that can fail on its own — a cookie
+   * store that is not writable in this context, a session too large to store,
+   * an adapter that never ran.
+   *
+   * Redirecting on the strength of the auth call alone is what produced the
+   * "sign-in succeeds but the user lands back on /login" loop: the action
+   * returned `{ error: null }`, the redirect fired, and the very next request
+   * had no session, so the proxy bounced it straight back. There was nothing
+   * in any log to say why, because nothing had reported a failure.
+   *
+   * So: confirm the session was actually written, and fail loudly if it was
+   * not. This reads the request's own cookie store, which reflects the writes
+   * the Supabase client just made.
+   */
+  const sessionCookies = countSessionCookies((await cookies()).getAll())
+  authDebug('signIn', { authOk: true, sessionCookies })
+
+  if (sessionCookies === 0) {
+    return {
+      error:
+        'تم التحقق من بيانات الدخول لكن تعذّر حفظ الجلسة في المتصفح. ' +
+        'راجع سجل الخادم — شغّل التطبيق بالأمر AUTH_DEBUG=1 npm run dev لمعرفة السبب.',
+    }
   }
 
   revalidatePath('/', 'layout')

@@ -14,6 +14,7 @@ export type AppUser = Tables<'users'>
  */
 export type AuthFailure =
   | 'no_session' // not signed in
+  | 'auth_unavailable' // Supabase Auth could not be reached — NOT a sign-out
   | 'not_provisioned' // authenticated with Supabase, but no public.users row
   | 'inactive' // row exists, active = false
   | 'insufficient_role' // signed in, active, wrong role
@@ -38,9 +39,20 @@ export type AuthResult =
 export async function getAuthResult(): Promise<AuthResult> {
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data, error } = await supabase.auth.getUser()
+  const user = data.user
+
+  /*
+   * "Supabase is unreachable" is not "you are signed out". Reporting no_session
+   * here sends a user holding a perfectly valid cookie to the login form, where
+   * signing in again cannot help — the same call will fail again. It gets its
+   * own state so the screen says what is actually wrong.
+   *
+   * Still fail closed: no user resolved means no access, whatever the cause.
+   */
+  if (!user && error?.name === 'AuthRetryableFetchError') {
+    return { ok: false, reason: 'auth_unavailable' }
+  }
 
   if (!user) return { ok: false, reason: 'no_session' }
 
@@ -70,6 +82,8 @@ export async function requireActiveUser(): Promise<AppUser> {
   switch (result.reason) {
     case 'no_session':
       redirect('/login')
+    case 'auth_unavailable':
+      redirect('/no-access?reason=auth_unavailable')
     case 'not_provisioned':
       redirect('/no-access?reason=not_provisioned')
     case 'inactive':

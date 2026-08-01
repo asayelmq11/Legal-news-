@@ -49,13 +49,25 @@ npm run dev
 | `npm run build` | Production build (fails on type errors) |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | vitest — 286 assertions incl. session persistence, retry, health, locks, alerts |
+| `npm run test` | vitest — 298 assertions incl. session persistence, retry, health, locks, alerts |
 | `npm run verify` | typecheck → lint → test → build. **This is what CI runs.** |
 | `npm run db:check` | applies all migrations to a scratch Postgres and runs 61 SQL assertions |
 | `npm run db:types` | regenerates `types/database.ts` from a live schema |
 
 Next 16 no longer runs ESLint during `next build`, which is why `verify` exists
 as a separate composite step rather than relying on the build alone.
+
+### Diagnosing a sign-in that does not stick
+
+```bash
+AUTH_DEBUG=1 npm run dev
+```
+
+Prints one line per stage of the sign-in — how many cookies the Supabase client
+asked to write, whether the write succeeded, how many session cookies the action
+ended up with, and how many the next request carried. Counts, booleans, request
+paths and error class names only: no cookie names, no values, no tokens, no
+credentials.
 
 ---
 
