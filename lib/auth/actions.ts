@@ -12,6 +12,7 @@ import {
   sanitizeAuthError,
 } from '@/lib/auth/debug'
 import { describeProjectBinding } from '@/lib/auth/project-check'
+import { updatePasswordSchema } from '@/lib/auth/password'
 import { createClient } from '@/lib/supabase/server'
 
 /**
@@ -161,6 +162,102 @@ export async function signIn(_prev: LoginState, formData: FormData): Promise<Log
 
   revalidatePath('/', 'layout')
   redirect(safeNext(parsed.data.next))
+}
+
+/* -------------------------------------------------------------------------- */
+/* Password recovery                                                           */
+/* -------------------------------------------------------------------------- */
+
+export type UpdatePasswordState =
+  | { status: 'idle' }
+  | { status: 'failed'; error: string }
+  | { status: 'no_session' }
+
+/**
+ * Sets a new password for whoever the current session belongs to.
+ *
+ * Reached two ways, and it does not need to tell them apart: from a recovery
+ * link, where the client has just exchanged the fragment for a session, or
+ * from an ordinary signed-in session. `updateUser` only ever touches the
+ * session's own user, so there is no way to aim this at somebody else.
+ *
+ * The recovery session is revoked globally on success. A recovery link hands
+ * out a full session to anyone holding the email, so leaving it alive after
+ * the password has been changed would mean the reset did not actually end the
+ * access it was meant to end. `scope: 'global'` invalidates every refresh
+ * token for the user, on every device.
+ *
+ * Nothing in this function reads or writes a token, a fragment, or a password
+ * to any log. Supabase errors go through sanitizeAuthError() first.
+ */
+export async function updatePassword(
+  _prev: UpdatePasswordState,
+  formData: FormData,
+): Promise<UpdatePasswordState> {
+  const parsed = updatePasswordSchema.safeParse({
+    password: formData.get('password'),
+    confirm: formData.get('confirm'),
+  })
+
+  if (!parsed.success) {
+    return { status: 'failed', error: parsed.error.issues[0]?.message ?? 'كلمة المرور غير صالحة' }
+  }
+
+  const supabase = await createClient()
+
+  /*
+   * getUser() rather than getSession(): it revalidates with Supabase instead of
+   * trusting the cookie, so an expired or already-consumed recovery session is
+   * caught here rather than surfacing as a confusing failure from updateUser.
+   */
+  const { data, error: sessionError } = await supabase.auth.getUser()
+  if (!data.user) {
+    authDebug('updatePassword', {
+      hasSession: false,
+      authError: sanitizeAuthError(sessionError).name,
+    })
+    return { status: 'no_session' }
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password })
+
+  if (error) {
+    const detail = sanitizeAuthError(error)
+    authDebug('updatePassword', {
+      hasSession: true,
+      updated: false,
+      name: detail.name,
+      code: detail.code,
+      status: detail.status ?? 'none',
+      message: detail.message,
+    })
+    console.error(
+      `[auth] password update rejected: name=${detail.name} code=${detail.code} ` +
+        `status=${detail.status ?? 'none'} message="${detail.message}"`,
+    )
+
+    /*
+     * Supabase refuses a password identical to the current one. Say so — it is
+     * not a security-relevant disclosure to someone who already holds the
+     * session, and "something went wrong" would leave them retrying the same
+     * password.
+     */
+    if (detail.code === 'same_password') {
+      return { status: 'failed', error: 'كلمة المرور الجديدة مطابقة للحالية. اختر كلمة مرور مختلفة.' }
+    }
+
+    return {
+      status: 'failed',
+      error: 'تعذّر تحديث كلمة المرور. راجع سجل الخادم أو اطلب رابطاً جديداً من مسؤول النظام.',
+    }
+  }
+
+  // Revoke the recovery session everywhere before sending them back to sign in.
+  await supabase.auth.signOut({ scope: 'global' })
+  authDebug('updatePassword', { hasSession: true, updated: true, revoked: true })
+
+  revalidatePath('/', 'layout')
+  redirect('/login?reset=1')
 }
 
 export async function signOut(): Promise<never> {

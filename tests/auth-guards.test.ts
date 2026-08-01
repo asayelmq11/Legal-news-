@@ -24,9 +24,12 @@ function user(overrides: Partial<AppUser> = {}): AppUser {
 /* -------------------------------------------------------------------------- */
 
 describe('public path allow-list', () => {
-  it('permits only the login and auth-callback routes', () => {
+  it('permits only the login, auth-callback and password-recovery routes', () => {
     expect(isPublicPath('/login')).toBe(true)
     expect(isPublicPath('/auth/callback')).toBe(true)
+    // A recovery link arrives with no cookies — its session is in the URL
+    // fragment, which never reaches the server.
+    expect(isPublicPath('/update-password')).toBe(true)
   })
 
   it('protects every application route', () => {

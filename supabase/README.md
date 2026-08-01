@@ -126,6 +126,20 @@ values ('<uid-from-step-1>', '<email-in-lowercase>', 'اسم المسؤول', 'a
 Every later user is added through the admin panel (M7). The email must be
 lowercase — a CHECK constraint enforces it.
 
+### 3a. Register the password-recovery redirect
+
+**Authentication → URL Configuration → Redirect URLs**, add:
+
+```
+http://localhost:3000/update-password
+https://<your-production-host>/update-password
+```
+
+Supabase redirects only to URLs on this list. Without the entry, a recovery
+link falls back to the Site URL and lands on `/login`, where the session sits
+unusable in the URL fragment. There is no self-service reset: an administrator
+sends the email from **Authentication → Users → ⋯ → Send password recovery**.
+
 To verify the seal is intact after deployment, run as that admin:
 
 ```sql

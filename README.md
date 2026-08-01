@@ -49,7 +49,7 @@ npm run dev
 | `npm run build` | Production build (fails on type errors) |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | vitest — 316 assertions incl. session persistence, retry, health, locks, alerts |
+| `npm run test` | vitest — 336 assertions incl. session persistence, retry, health, locks, alerts |
 | `npm run verify` | typecheck → lint → test → build. **This is what CI runs.** |
 | `npm run db:check` | applies all migrations to a scratch Postgres and runs 61 SQL assertions |
 | `npm run db:types` | regenerates `types/database.ts` from a live schema |
@@ -102,6 +102,12 @@ The `N8N_TRIGGER_SECRET` used by the admin "Run now" control is server-side only
 and is deliberately not `NEXT_PUBLIC_`. When it is missing the control fails
 closed — disabled with an explanation, never an unauthenticated request.
 
+A **password-recovery URL is a credential.** Its fragment carries a live access
+token and refresh token, so it must never be pasted into a chat, a ticket, or a
+log. If one is exposed, send a fresh recovery email — that invalidates the old
+link — and use **Authentication → Users → ⋯ → Sign out user** to revoke any
+session it may already have created.
+
 ---
 
 ## Project layout
@@ -110,12 +116,13 @@ closed — disabled with an explanation, never an unauthenticated request.
 app/
   (app)/            authenticated shell — guarded by requireActiveUser()
   login/            sign-in (no self-provisioning)
-  no-access/        unprovisioned and deactivated states
+  update-password/  where a Supabase recovery link lands (public)
+  no-access/        unprovisioned, deactivated and auth-unavailable states
   unauthorized/     insufficient role
   configuration-error/  missing environment, fails closed
 components/         UI primitives and feature components
 lib/
-  auth/             session resolution, role guards, sign-in/out actions
+  auth/             session resolution, role guards, sign-in/out, recovery
   ops/              retry policy, health scoring, locks, manual run
   queries/          server-only typed reads (no raw SQL)
   search/           Arabic normalisation — contract shared with Postgres

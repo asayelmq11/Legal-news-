@@ -881,6 +881,11 @@ the archive write-seal.
 **Authentication → URL Configuration**
 - Site URL: `https://<PROJECT>.vercel.app`
 - Redirect URLs: add `https://<PROJECT>.vercel.app/**`
+- Redirect URLs: add `https://<PROJECT>.vercel.app/update-password`
+
+The explicit `/update-password` entry is the one password recovery uses — see
+§L. Keep the local entries in the list too, or recovery stops working on a
+developer machine.
 
 ### K.6 n8n callback URLs — ⚙️ N8N
 
@@ -903,6 +908,57 @@ deployment.
 
 Only once K.7 passes: activate **`01 — Source Scheduler`**. UAE Legislation is
 priority 1, so it will be polled hourly from then on.
+
+---
+
+# L. PASSWORD RECOVERY
+
+There is no self-service "forgot password" in the application, by design:
+accounts are created and recovered by an administrator. What the application
+provides is the screen the recovery link lands on.
+
+### L.1 Register the redirect URL — 🗄️ SUPABASE
+
+**Authentication → URL Configuration → Redirect URLs → Add URL**
+
+```
+http://localhost:3000/update-password
+```
+
+Add the production one alongside it once deployed:
+
+```
+https://<PROJECT>.vercel.app/update-password
+```
+
+Supabase only redirects to URLs on this list; anything else silently falls back
+to the Site URL, which is how a recovery link ends up on `/login` with the
+session stranded in a fragment the login page cannot use.
+
+**Authentication → Emails → Reset Password** — leave the template's
+`{{ .ConfirmationURL }}` alone. It already carries the redirect.
+
+### L.2 Send a recovery email — 🗄️ SUPABASE
+
+**Authentication → Users →** the user's row **→ ⋯ → Send password recovery**
+
+### L.3 What the user does — 🌐 BROWSER
+
+The link opens `/update-password`. The page reads the session out of the URL
+fragment, clears it from the address bar immediately, and asks for a new
+password twice. On success every session for that user is revoked — on every
+device — and they are returned to `/login` to sign in again.
+
+An expired or already-used link says so and offers a way back to `/login`
+instead of failing silently.
+
+### L.4 Treat leaked recovery links as compromised — ⚠️
+
+A recovery URL contains a live access token and refresh token in its fragment.
+If one is ever pasted into a chat, a ticket, or a log, the correct response is
+to send a fresh recovery email — which invalidates the old link — and, if the
+link may already have been used, **Authentication → Users → ⋯ → Sign out user**
+to revoke every session.
 
 ---
 

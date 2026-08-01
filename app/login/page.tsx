@@ -5,16 +5,17 @@ import { LoginForm } from './login-form'
 export const metadata: Metadata = { title: 'تسجيل الدخول' }
 
 /**
- * There is no sign-up link and no password-reset self-service, by design:
- * accounts are created by an administrator. A person who cannot sign in needs
- * an administrator, not a form.
+ * There is no sign-up link and no self-service "forgot password", by design:
+ * accounts are created by an administrator, and a recovery email is sent by an
+ * administrator. A person who cannot sign in needs an administrator, not a
+ * form. The link in that email lands on /update-password.
  */
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>
+  searchParams: Promise<{ next?: string; reset?: string }>
 }) {
-  const { next } = await searchParams
+  const { next, reset } = await searchParams
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-16">
@@ -25,6 +26,15 @@ export default async function LoginPage({
             نظام داخلي للإدارة القانونية — الدخول للموظفين المصرّح لهم فقط
           </p>
         </header>
+
+        {reset ? (
+          <p
+            role="status"
+            className="rounded-md border border-(--color-ok) bg-(--color-ok-subtle) px-3 py-2 text-sm leading-relaxed text-(--color-ok)"
+          >
+            تم تحديث كلمة المرور وإنهاء جميع الجلسات السابقة. سجّل الدخول بكلمة المرور الجديدة.
+          </p>
+        ) : null}
 
         <LoginForm next={next} />
       </div>

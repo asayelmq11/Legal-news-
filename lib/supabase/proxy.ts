@@ -4,8 +4,16 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { authDebug, countSessionCookies } from '@/lib/auth/debug'
 import type { Database } from '@/types/database'
 
-/** Routes reachable without a session. Everything else requires one. */
-const PUBLIC_PATHS = ['/login', '/auth/callback'] as const
+/**
+ * Routes reachable without a session. Everything else requires one.
+ *
+ * `/update-password` has to be here: a recovery link arrives with no cookies at
+ * all, because the session is in the URL fragment and a fragment is never sent
+ * to the server. Bouncing it to /login would strand the fragment on a page that
+ * cannot use it. The page grants nothing on its own — it can only set a
+ * password for a session the browser manages to establish from that fragment.
+ */
+const PUBLIC_PATHS = ['/login', '/auth/callback', '/update-password'] as const
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
