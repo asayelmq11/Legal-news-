@@ -17,6 +17,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/updates', labelAr: 'الأرشيف القانوني', roles: ['admin', 'viewer'] },
   { href: '/newsletters', labelAr: 'النشرات', roles: ['admin', 'viewer'] },
   { href: '/sources', labelAr: 'المصادر', roles: ['admin'] },
+  { href: '/ops', labelAr: 'التشغيل', roles: ['admin'] },
   { href: '/users', labelAr: 'المستخدمون', roles: ['admin'] },
   { href: '/settings', labelAr: 'الإعدادات', roles: ['admin'] },
 ]

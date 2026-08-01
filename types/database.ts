@@ -52,6 +52,90 @@ export type Database = {
           },
         ]
       }
+      job_dead_letters: {
+        Row: {
+          id: string
+          source_id: string | null
+          stage: Database['public']['Enums']['dead_letter_stage']
+          item_url: string | null
+          content_hash: string | null
+          error_code: string
+          error_message: string | null
+          attempt_number: number
+          max_attempts: number
+          first_attempt_at: string | null
+          last_attempt_at: string | null
+          workflow_execution_id: string | null
+          payload: Json
+          state: Database['public']['Enums']['dead_letter_state']
+          replay_count: number
+          last_replay_at: string | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          source_id?: string | null
+          stage?: Database['public']['Enums']['dead_letter_stage']
+          item_url?: string | null
+          content_hash?: string | null
+          error_code: string
+          error_message?: string | null
+          attempt_number?: number
+          max_attempts?: number
+          first_attempt_at?: string | null
+          last_attempt_at?: string | null
+          workflow_execution_id?: string | null
+          payload?: Json
+          state?: Database['public']['Enums']['dead_letter_state']
+          replay_count?: number
+          last_replay_at?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          source_id?: string | null
+          stage?: Database['public']['Enums']['dead_letter_stage']
+          item_url?: string | null
+          content_hash?: string | null
+          error_code?: string
+          error_message?: string | null
+          attempt_number?: number
+          max_attempts?: number
+          first_attempt_at?: string | null
+          last_attempt_at?: string | null
+          workflow_execution_id?: string | null
+          payload?: Json
+          state?: Database['public']['Enums']['dead_letter_state']
+          replay_count?: number
+          last_replay_at?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'job_dead_letters_resolved_by_fkey'
+            columns: ['resolved_by']
+            isOneToOne: false
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'job_dead_letters_source_id_fkey'
+            columns: ['source_id']
+            isOneToOne: false
+            referencedRelation: 'sources'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       legal_updates: {
         Row: {
           id: string
@@ -175,6 +259,92 @@ export type Database = {
         }
         Relationships: []
       }
+      source_health_snapshots: {
+        Row: {
+          id: string
+          source_id: string
+          taken_at: string
+          classification: Database['public']['Enums']['health_status']
+          health_score: number
+          enabled: boolean
+          verified: boolean
+          stale: boolean
+          last_checked_at: string | null
+          last_success_at: string | null
+          last_item_found_at: string | null
+          consecutive_failures: number
+          dead_job_count: number
+          window_runs: number
+          fetch_success_rate: number | null
+          extraction_success_rate: number | null
+          ai_success_rate: number | null
+          gate_acceptance_rate: number | null
+          duplicate_rate: number | null
+          avg_response_ms: number | null
+          last_http_status: number | null
+          last_error_code: string | null
+          last_error_message: string | null
+        }
+        Insert: {
+          id?: string
+          source_id: string
+          taken_at?: string
+          classification: Database['public']['Enums']['health_status']
+          health_score: number
+          enabled: boolean
+          verified: boolean
+          stale: boolean
+          last_checked_at?: string | null
+          last_success_at?: string | null
+          last_item_found_at?: string | null
+          consecutive_failures?: number
+          dead_job_count?: number
+          window_runs?: number
+          fetch_success_rate?: number | null
+          extraction_success_rate?: number | null
+          ai_success_rate?: number | null
+          gate_acceptance_rate?: number | null
+          duplicate_rate?: number | null
+          avg_response_ms?: number | null
+          last_http_status?: number | null
+          last_error_code?: string | null
+          last_error_message?: string | null
+        }
+        Update: {
+          id?: string
+          source_id?: string
+          taken_at?: string
+          classification?: Database['public']['Enums']['health_status']
+          health_score?: number
+          enabled?: boolean
+          verified?: boolean
+          stale?: boolean
+          last_checked_at?: string | null
+          last_success_at?: string | null
+          last_item_found_at?: string | null
+          consecutive_failures?: number
+          dead_job_count?: number
+          window_runs?: number
+          fetch_success_rate?: number | null
+          extraction_success_rate?: number | null
+          ai_success_rate?: number | null
+          gate_acceptance_rate?: number | null
+          duplicate_rate?: number | null
+          avg_response_ms?: number | null
+          last_http_status?: number | null
+          last_error_code?: string | null
+          last_error_message?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'source_health_snapshots_source_id_fkey'
+            columns: ['source_id']
+            isOneToOne: false
+            referencedRelation: 'sources'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       sources: {
         Row: {
           id: string
@@ -210,6 +380,16 @@ export type Database = {
           exclusion_group: string | null
           requires_authority_check: boolean
           updated_by: string | null
+          lock_owner: string | null
+          lock_acquired_at: string | null
+          lock_expires_at: string | null
+          first_attempt_at: string | null
+          last_error_code: string | null
+          max_silence_minutes: number | null
+          last_alert_kind: string | null
+          last_alert_at: string | null
+          health_score: number | null
+          last_http_status: number | null
         }
         Insert: {
           id?: string
@@ -245,6 +425,16 @@ export type Database = {
           exclusion_group?: string | null
           requires_authority_check?: boolean
           updated_by?: string | null
+          lock_owner?: string | null
+          lock_acquired_at?: string | null
+          lock_expires_at?: string | null
+          first_attempt_at?: string | null
+          last_error_code?: string | null
+          max_silence_minutes?: number | null
+          last_alert_kind?: string | null
+          last_alert_at?: string | null
+          health_score?: number | null
+          last_http_status?: number | null
         }
         Update: {
           id?: string
@@ -280,6 +470,16 @@ export type Database = {
           exclusion_group?: string | null
           requires_authority_check?: boolean
           updated_by?: string | null
+          lock_owner?: string | null
+          lock_acquired_at?: string | null
+          lock_expires_at?: string | null
+          first_attempt_at?: string | null
+          last_error_code?: string | null
+          max_silence_minutes?: number | null
+          last_alert_kind?: string | null
+          last_alert_at?: string | null
+          health_score?: number | null
+          last_http_status?: number | null
         }
         Relationships: [
           {
@@ -409,8 +609,10 @@ export type Database = {
     Enums: {
       config_status: 'pending_verification' | 'verified' | 'blocked_by_access' | 'requires_subscription'
       country_code: 'SA' | 'AE' | 'KW' | 'QA' | 'BH' | 'OM' | 'GCC'
+      dead_letter_stage: 'fetch' | 'extract' | 'ai_classify' | 'hash' | 'publish' | 'unknown'
+      dead_letter_state: 'open' | 'replayed' | 'dismissed' | 'resolved'
       document_type: 'law' | 'royal_decree' | 'ministerial_decision' | 'executive_regulation' | 'circular' | 'regulatory_framework' | 'official_notice' | 'court_precedent' | 'consultation_draft' | 'other'
-      health_status: 'never_run' | 'healthy' | 'degraded' | 'failing'
+      health_status: 'never_run' | 'healthy' | 'degraded' | 'failing' | 'stale' | 'disabled' | 'unverified'
       legal_category: 'tax' | 'customs' | 'employment' | 'corporate' | 'financial' | 'capital_markets' | 'banking' | 'data_privacy' | 'cybersecurity' | 'competition' | 'intellectual_property' | 'litigation' | 'licensing' | 'real_estate' | 'energy' | 'healthcare' | 'trade' | 'general'
       legal_status: 'enacted' | 'effective' | 'draft' | 'amended' | 'repealed' | 'pending'
       newsletter_status: 'sent' | 'failed' | 'skipped'

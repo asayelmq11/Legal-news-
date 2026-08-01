@@ -67,7 +67,21 @@ export const LEGAL_STATUSES = [
 ] as const
 export type LegalStatus = (typeof LEGAL_STATUSES)[number]
 
-export const HEALTH_STATUSES = ['never_run', 'healthy', 'degraded', 'failing'] as const
+/**
+ * Mirrors the health_status enum, extended in migration 0014 with the M10
+ * classifications. 'disabled' and 'unverified' describe a source nobody is
+ * checking; 'stale' one that is checked but has gone quiet for longer than its
+ * configured silence window.
+ */
+export const HEALTH_STATUSES = [
+  'never_run',
+  'healthy',
+  'degraded',
+  'failing',
+  'stale',
+  'disabled',
+  'unverified',
+] as const
 export type HealthStatus = (typeof HEALTH_STATUSES)[number]
 
 export const RUN_STATUSES = ['success', 'partial', 'failed'] as const
@@ -139,6 +153,9 @@ export const HEALTH_STATUS_LABELS_AR: Readonly<Record<HealthStatus, string>> = {
   healthy: 'سليم',
   degraded: 'متدهور',
   failing: 'متعطل',
+  stale: 'صامت',
+  disabled: 'موقوف',
+  unverified: 'غير متحقَّق منه',
 }
 
 export const USER_ROLE_LABELS_AR: Readonly<Record<UserRole, string>> = {

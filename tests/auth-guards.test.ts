@@ -30,7 +30,7 @@ describe('public path allow-list', () => {
   })
 
   it('protects every application route', () => {
-    for (const path of ['/', '/updates', '/updates/abc', '/sources', '/users', '/settings']) {
+    for (const path of ['/', '/updates', '/updates/abc', '/sources', '/users', '/settings', '/ops']) {
       expect(isPublicPath(path)).toBe(false)
     }
   })
@@ -73,6 +73,7 @@ describe('role-aware navigation', () => {
     expect(hrefs).not.toContain('/sources')
     expect(hrefs).not.toContain('/users')
     expect(hrefs).not.toContain('/settings')
+    expect(hrefs).not.toContain('/ops')
   })
 
   it('shows every section to an admin', () => {

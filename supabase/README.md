@@ -1,6 +1,6 @@
 # Supabase — schema, deployment and verification
 
-Six tables, one access-control function, zero triggers, zero business logic.
+Eight tables, one access-control function, zero triggers, zero business logic.
 
 Source registry contents and the activation procedure are in
 [`SOURCE_REGISTRY.md`](SOURCE_REGISTRY.md).
@@ -20,6 +20,10 @@ migrations/
   0011_source_registry_flags.sql exclusion groups, authority checks, access states
   0012_archive_query_indexes.sql legal_status + effective_date filter indexes
   0013_source_attribution.sql    sources.updated_by
+  0014_health_status_values.sql  stale / disabled / unverified
+  0015_ops_columns.sql           locks, retry metadata, staleness, alerts
+  0016_health_snapshots.sql      source_health_snapshots (7th table)
+  0017_dead_letters.sql          job_dead_letters (8th table)
 fixtures/
   dev_legal_updates.sql     DEV ONLY — invented content, never a migration
 tests/
@@ -30,6 +34,7 @@ tests/
   04_archive_query_checks.sql    search, filters, index usage, pagination
   05_dashboard_checks.sql        aggregation, bucket totals, bounded reads
   06_admin_checks.sql            admin mutations, guards, activation gates
+  07_ops_checks.sql              locks, dead letters, health snapshots
   run_local_checks.sh       applies everything and runs both suites
 ```
 
@@ -54,7 +59,7 @@ for why Postgres RLS leaves no alternative.
 ## Local verification
 
 Requires a running Postgres (tested on 16.13) and permission to create
-databases. Applies every migration twice, then loads dev fixtures and runs 89 assertions plus a TypeScript/SQL normalisation parity check.
+databases. Applies every migration twice, then loads dev fixtures and runs 105 assertions plus a TypeScript/SQL normalisation parity check.
 
 ```bash
 supabase/tests/run_local_checks.sh
@@ -219,7 +224,7 @@ partial-word and fuzzy matching that full-text search misses.
 
 ## Verified locally
 
-89 assertions, all passing against Postgres 16.13:
+105 assertions, all passing against Postgres 16.13:
 
 - six tables exactly; no triggers; exactly one function
 - RLS enabled on all six tables

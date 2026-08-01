@@ -5,20 +5,27 @@
 -- the file into a pass/fail gate.
 -- =============================================================================
 
-\echo '── 1. exactly six tables in public ─────────────────────────────────────'
+\echo '── 1. the table set is exactly the approved one ─────────────────────────'
+/*
+ * Six core tables (M2) plus the two operational tables M10 required:
+ * source_health_snapshots and job_dead_letters. Asserted as an exact SET
+ * rather than a count, so an unplanned table is caught by name.
+ */
 do $$
 declare
-  n int;
-  found text;
+  expected text[] := array[
+    'app_settings','job_dead_letters','legal_updates','newsletter_history',
+    'source_health_snapshots','sources','users','workflow_logs'
+  ];
+  found text[];
 begin
-  select count(*), string_agg(tablename, ', ' order by tablename)
-    into n, found
+  select array_agg(tablename order by tablename) into found
   from pg_tables where schemaname = 'public';
 
-  if n <> 6 then
-    raise exception 'expected 6 tables, found % (%)', n, found;
+  if found is distinct from expected then
+    raise exception 'table set drifted. expected %, found %', expected, found;
   end if;
-  raise notice 'PASS — 6 tables: %', found;
+  raise notice 'PASS — exactly the 8 approved tables: %', array_to_string(found, ', ');
 end $$;
 
 \echo '── 2. no rule triggers anywhere ────────────────────────────────────────'
