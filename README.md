@@ -49,7 +49,7 @@ npm run dev
 | `npm run build` | Production build (fails on type errors) |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | vitest — 298 assertions incl. session persistence, retry, health, locks, alerts |
+| `npm run test` | vitest — 316 assertions incl. session persistence, retry, health, locks, alerts |
 | `npm run verify` | typecheck → lint → test → build. **This is what CI runs.** |
 | `npm run db:check` | applies all migrations to a scratch Postgres and runs 61 SQL assertions |
 | `npm run db:types` | regenerates `types/database.ts` from a live schema |
@@ -68,6 +68,21 @@ asked to write, whether the write succeeded, how many session cookies the action
 ended up with, and how many the next request carried. Counts, booleans, request
 paths and error class names only: no cookie names, no values, no tokens, no
 credentials.
+
+When Supabase itself rejects the sign-in, the error name, code, HTTP status and
+a scrubbed message are logged **whether or not `AUTH_DEBUG` is set** — unless it
+is simply a wrong password, which is expected and stays silent. Alongside it
+goes a project-binding line proving whether `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` name the same project:
+
+```
+[auth] sign-in rejected by Supabase: name=AuthApiError code=invalid_api_key status=401 message="Invalid API key"
+[auth] project binding: urlRef=dd65eea0 keyRef=2b96dd70 match=false keyRole=anon
+```
+
+`urlRef` and `keyRef` are truncated SHA-256 digests, never the refs themselves.
+`keyRole` comes from the key's own `role` claim — anything other than `anon`
+means a privileged key has been put somewhere it will reach the browser.
 
 ---
 

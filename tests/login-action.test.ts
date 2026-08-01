@@ -11,7 +11,11 @@
  *
  * These tests pin the invariant: no session cookie, no redirect.
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+
+// describeProjectBinding() reads the validated server env at call time.
+process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://abcdefghijklmnopqrst.supabase.co'
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon-key-not-a-jwt'
 
 /* -------------------------------------------------------------------------- */
 /* Request stubs                                                               */
@@ -22,7 +26,9 @@ const cookieStore = new Map<string, string>()
 
 /** Set by each test to steer the stubbed Supabase client. */
 let behaviour = {
-  signInError: null as { name: string; message: string } | null,
+  signInError: null as
+    | { name: string; message: string; code?: string; status?: number }
+    | null,
   /** Whether signInWithPassword persists a session cookie, as it normally does. */
   persistsSession: true,
   getUserError: null as { name: string; message: string } | null,
@@ -88,6 +94,10 @@ function form(fields: Record<string, string>): FormData {
 
 const CREDENTIALS = { email: 'admin@legal.internal', password: 'correct-horse' }
 
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 beforeEach(() => {
   cookieStore.clear()
   redirects.length = 0
@@ -126,14 +136,14 @@ describe('session cookie detection', () => {
 
 describe('signIn — a redirect is earned, not assumed', () => {
   it('redirects once the session cookie is actually present', async () => {
-    await expect(signIn({ error: null }, form(CREDENTIALS))).rejects.toThrow('NEXT_REDIRECT')
+    await expect(signIn({ status: 'idle' }, form(CREDENTIALS))).rejects.toThrow('NEXT_REDIRECT')
 
     expect(redirects).toEqual(['/'])
   })
 
   it('honours a safe next destination', async () => {
     await expect(
-      signIn({ error: null }, form({ ...CREDENTIALS, next: '/updates?page=2' })),
+      signIn({ status: 'idle' }, form({ ...CREDENTIALS, next: '/updates?page=2' })),
     ).rejects.toThrow('NEXT_REDIRECT')
 
     expect(redirects).toEqual(['/updates?page=2'])
@@ -141,7 +151,7 @@ describe('signIn — a redirect is earned, not assumed', () => {
 
   it('refuses an off-site next destination', async () => {
     await expect(
-      signIn({ error: null }, form({ ...CREDENTIALS, next: '//evil.example/x' })),
+      signIn({ status: 'idle' }, form({ ...CREDENTIALS, next: '//evil.example/x' })),
     ).rejects.toThrow('NEXT_REDIRECT')
 
     expect(redirects).toEqual(['/'])
@@ -152,28 +162,87 @@ describe('signIn — a redirect is earned, not assumed', () => {
     // straight back to /login with nothing logged.
     behaviour.persistsSession = false
 
-    const state = await signIn({ error: null }, form(CREDENTIALS))
+    const state = await signIn({ status: 'idle' }, form(CREDENTIALS))
 
     expect(redirects).toEqual([])
-    expect(state.error).toBeTruthy()
-    expect(state.error).toContain('AUTH_DEBUG=1')
+    expect(state).toEqual({
+      status: 'failed',
+      error: expect.stringContaining('AUTH_DEBUG=1'),
+    })
   })
 
   it('still returns one indistinguishable message for bad credentials', async () => {
-    behaviour.signInError = { name: 'AuthApiError', message: 'Invalid login credentials' }
+    behaviour.signInError = {
+      name: 'AuthApiError',
+      code: 'invalid_credentials',
+      status: 400,
+      message: 'Invalid login credentials',
+    }
 
-    const state = await signIn({ error: null }, form(CREDENTIALS))
+    const state = await signIn({ status: 'idle' }, form(CREDENTIALS))
 
     expect(redirects).toEqual([])
-    expect(state.error).toBe('بيانات الدخول غير صحيحة')
+    expect(state).toEqual({ status: 'failed', error: 'بيانات الدخول غير صحيحة' })
+  })
+
+  it('does NOT dress a configuration failure up as a wrong password', async () => {
+    // "Invalid API key" is what an anon key from the wrong project looks like.
+    // Telling an administrator their own password is wrong, and logging
+    // nothing, is how a misconfiguration survives for hours.
+    const logged: string[] = []
+    vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
+      logged.push(String(line))
+    })
+
+    behaviour.signInError = {
+      name: 'AuthApiError',
+      code: 'invalid_api_key',
+      status: 401,
+      message: 'Invalid API key',
+    }
+
+    const state = await signIn({ status: 'idle' }, form(CREDENTIALS))
+
+    expect(redirects).toEqual([])
+    expect(state.status).toBe('failed')
+    expect(state.status === 'failed' && state.error).not.toBe('بيانات الدخول غير صحيحة')
+
+    // Logged unconditionally — not behind AUTH_DEBUG.
+    expect(logged.join('\n')).toContain('name=AuthApiError')
+    expect(logged.join('\n')).toContain('status=401')
+    expect(logged.join('\n')).toContain('project binding')
+  })
+
+  it('keeps a rejected password out of the log', async () => {
+    const logged: string[] = []
+    vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
+      logged.push(String(line))
+    })
+
+    behaviour.signInError = {
+      name: 'AuthApiError',
+      code: 'invalid_credentials',
+      status: 400,
+      message: 'Invalid login credentials',
+    }
+
+    await signIn({ status: 'idle' }, form(CREDENTIALS))
+
+    expect(logged).toEqual([])
   })
 
   it('never reports a credential failure as a cookie failure', async () => {
-    behaviour.signInError = { name: 'AuthApiError', message: 'Invalid login credentials' }
+    behaviour.signInError = {
+      name: 'AuthApiError',
+      code: 'invalid_credentials',
+      status: 400,
+      message: 'Invalid login credentials',
+    }
 
-    const state = await signIn({ error: null }, form(CREDENTIALS))
+    const state = await signIn({ status: 'idle' }, form(CREDENTIALS))
 
-    expect(state.error).not.toContain('AUTH_DEBUG')
+    expect(state.status).toBe('failed')
+    expect(state.status === 'failed' && state.error).not.toContain('AUTH_DEBUG')
   })
 })
 
