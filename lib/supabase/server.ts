@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { cache } from 'react'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 
@@ -15,8 +16,16 @@ import type { Database } from '@/types/database'
  * giving it a key that could would defeat the seal enforced in migration 0005.
  *
  * `server-only` makes importing this from a Client Component a build error.
+ *
+ * Memoised per request with React `cache()`. The dashboard alone opens more
+ * than twenty queries, and an un-memoised factory gave each of them its own
+ * auth client. When the access token is close to expiry they would then all
+ * refresh at once — and because Supabase rotates refresh tokens, exactly one
+ * wins and the rest fail with "Invalid Refresh Token: Already Used", tearing
+ * down a session that was perfectly healthy a moment earlier. One client per
+ * request means one refresh per request.
  */
-export async function createClient() {
+export const createClient = cache(async function createClient() {
   const env = getServerEnv()
   const cookieStore = await cookies()
 
@@ -33,16 +42,25 @@ export async function createClient() {
             for (const { name, value, options } of cookiesToSet) {
               cookieStore.set(name, value, options)
             }
-          } catch {
+          } catch (error) {
             /*
              * Server Components cannot set cookies. That is expected and
-             * harmless: the middleware refreshes the session on every request,
-             * so the refreshed token is already persisted by the time a page
+             * harmless: the proxy refreshes the session on every request, so
+             * the refreshed token is already persisted by the time a page
              * renders. Swallowing this is the documented @supabase/ssr pattern.
+             *
+             * Anything else is NOT expected — a Server Action that fails to
+             * write the session cookie looks exactly like a successful sign-in
+             * that never signs anyone in. Surface it. Only the message is
+             * logged; cookie names and values are never printed.
              */
+            const message = error instanceof Error ? error.message : String(error)
+            if (!/cookies can only be modified/i.test(message)) {
+              console.error(`[auth] could not persist session cookies: ${message}`)
+            }
           }
         },
       },
     },
   )
-}
+})
