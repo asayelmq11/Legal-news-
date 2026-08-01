@@ -3,7 +3,8 @@
 import { useActionState } from 'react'
 
 import { ActionMessage, SubmitButton } from '@/components/admin/form-parts'
-import { IDLE, setSourceActive, setSourceConfigStatus } from '@/lib/admin/actions'
+import { IDLE } from '@/lib/actions/state'
+import { setSourceActive, setSourceConfigStatus } from '@/lib/admin/actions'
 import type { SourceRow } from '@/lib/admin/queries'
 import { canActivate } from '@/lib/sources/status'
 

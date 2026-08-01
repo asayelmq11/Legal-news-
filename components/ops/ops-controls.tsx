@@ -3,7 +3,8 @@
 import { useActionState } from 'react'
 
 import { ActionMessage, SubmitButton, inputClass } from '@/components/admin/form-parts'
-import { OPS_IDLE, releaseSourceLock, resolveDeadLetter, triggerManualRun } from '@/lib/ops/actions'
+import { OPS_IDLE } from '@/lib/actions/state'
+import { releaseSourceLock, resolveDeadLetter, triggerManualRun } from '@/lib/ops/actions'
 import { COUNTRIES, COUNTRY_CODES } from '@/lib/constants/countries'
 
 interface SourceOption { id: string; authority_ar: string }

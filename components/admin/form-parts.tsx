@@ -2,7 +2,7 @@
 
 import { useFormStatus } from 'react-dom'
 
-import type { ActionState } from '@/lib/admin/actions'
+import type { ActionState } from '@/lib/actions/state'
 import { cn } from '@/lib/utils'
 
 export function SubmitButton({

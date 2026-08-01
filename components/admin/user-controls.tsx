@@ -3,7 +3,8 @@
 import { useActionState } from 'react'
 
 import { ActionMessage, Field, inputClass, SubmitButton } from '@/components/admin/form-parts'
-import { IDLE, createUserProfile, setUserActive, setUserRole } from '@/lib/admin/actions'
+import { IDLE } from '@/lib/actions/state'
+import { createUserProfile, setUserActive, setUserRole } from '@/lib/admin/actions'
 import type { UserRow } from '@/lib/admin/queries'
 import { USER_ROLE_LABELS_AR } from '@/lib/constants/taxonomy'
 

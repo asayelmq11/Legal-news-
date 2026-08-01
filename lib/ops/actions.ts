@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/auth/session'
 import { createClient } from '@/lib/supabase/server'
 import { getServerEnv, isManualTriggerConfigured } from '@/lib/env'
-import type { ActionState } from '@/lib/admin/actions'
+import type { ActionState } from '@/lib/actions/state'
 
 /**
  * Manual runs and dead-letter handling.
@@ -18,8 +18,6 @@ import type { ActionState } from '@/lib/admin/actions'
  * and the one that gets used in an emergency is the one least likely to be
  * correct.
  */
-
-export const OPS_IDLE: ActionState = { ok: false, message: null }
 
 const runSchema = z.object({
   scope: z.enum(['source', 'country', 'all', 'url', 'replay', 'drain']),

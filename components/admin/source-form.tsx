@@ -3,7 +3,8 @@
 import { useActionState, useState } from 'react'
 
 import { ActionMessage, Field, inputClass, SubmitButton } from '@/components/admin/form-parts'
-import { IDLE, saveSource } from '@/lib/admin/actions'
+import { IDLE } from '@/lib/actions/state'
+import { saveSource } from '@/lib/admin/actions'
 import { PARSER_CONFIG_TEMPLATES } from '@/lib/admin/source-schema'
 import { COUNTRIES, COUNTRY_CODES } from '@/lib/constants/countries'
 import { PARSER_TYPES, SOURCE_TYPES, SOURCE_TYPE_LABELS_AR } from '@/lib/constants/taxonomy'

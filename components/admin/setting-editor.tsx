@@ -3,11 +3,12 @@
 import { useActionState } from 'react'
 
 import { ActionMessage, inputClass, SubmitButton } from '@/components/admin/form-parts'
-import { IDLE, updateSetting } from '@/lib/admin/actions'
-import type { SettingDefinition } from '@/lib/settings/registry'
+import { IDLE } from '@/lib/actions/state'
+import { updateSetting } from '@/lib/admin/actions'
+import type { SettingView } from '@/lib/settings/registry'
 
 /** Serialises a stored JSONB value into the control's text representation. */
-function toInputValue(def: SettingDefinition, stored: unknown): string {
+function toInputValue(def: SettingView, stored: unknown): string {
   const value = stored ?? def.defaultValue
   switch (def.control) {
     case 'boolean':
@@ -27,7 +28,7 @@ export function SettingEditor({
   updatedAt,
   updatedByLabel,
 }: {
-  def: SettingDefinition
+  def: SettingView
   stored: unknown
   updatedAt: string | null
   updatedByLabel: string | null

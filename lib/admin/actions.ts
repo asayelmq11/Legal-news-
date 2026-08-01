@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/auth/session'
 import type { Enums, Json, TablesUpdate } from '@/types/database'
 import { createClient } from '@/lib/supabase/server'
+import type { ActionState } from '@/lib/actions/state'
 import { hostnameOfUrl, sourceFormSchema } from '@/lib/admin/source-schema'
 import { parseSettingValue, SETTINGS_BY_KEY } from '@/lib/settings/registry'
 
@@ -21,10 +22,6 @@ import { parseSettingValue, SETTINGS_BY_KEY } from '@/lib/settings/registry'
  * public.current_user_role() = 'admin'. These checks exist to produce a clear
  * Arabic message rather than a silent zero-row update.
  */
-
-export type ActionState = { ok: boolean; message: string | null; fieldErrors?: Record<string, string> }
-
-export const IDLE: ActionState = { ok: false, message: null }
 
 const uuid = z.uuid({ error: 'معرّف غير صالح' })
 

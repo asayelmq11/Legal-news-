@@ -1,6 +1,7 @@
 import { SettingEditor } from '@/components/admin/setting-editor'
 import { requireAdmin } from '@/lib/auth/session'
 import { listSettings, listUsers } from '@/lib/admin/queries'
+import { toSettingView } from '@/lib/settings/registry'
 import { formatDateAr } from '@/lib/utils'
 
 export const metadata = { title: 'الإعدادات' }
@@ -37,7 +38,7 @@ export default async function SettingsPage() {
         {rows.map(({ def, row }) => (
           <SettingEditor
             key={def.key}
-            def={def}
+            def={toSettingView(def)}
             stored={row?.value ?? null}
             updatedAt={row?.updated_at ? formatDateAr(row.updated_at) : null}
             updatedByLabel={row?.updated_by ? (nameById.get(row.updated_by) ?? null) : null}

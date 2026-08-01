@@ -38,6 +38,23 @@ export interface SettingDefinition {
   readonly failClosedNoteAr?: string
 }
 
+/**
+ * The half of a definition that may cross into a Client Component.
+ *
+ * `schema` is a Zod object — a class instance, and React refuses to serialise
+ * one across the server/client boundary. Passing a whole SettingDefinition to
+ * the settings form crashed the page at render time with "Only plain objects,
+ * and a few built-ins, can be passed to Client Components". The schema belongs
+ * on the server anyway: it is what parseSettingValue() validates against, and
+ * shipping it to the browser would suggest the browser's copy mattered.
+ */
+export type SettingView = Omit<SettingDefinition, 'schema'>
+
+export function toSettingView(def: SettingDefinition): SettingView {
+  const { schema: _schema, ...view } = def
+  return view
+}
+
 const emailList = z
   .array(z.email({ error: 'عنوان بريد إلكتروني غير صالح' }))
   .max(200, { error: 'الحد الأقصى 200 مستلم' })
