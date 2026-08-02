@@ -236,4 +236,142 @@ describe('n8n workflow exports', () => {
     expect(raw).toContain('allowed_domains')
     expect(raw).toContain('domain_mismatch')
   })
+
+  /* ---------------------------------------------------------------------- */
+  /* Regression guards — each of these previously broke a live run.          */
+  /* See docs/n8n-fixes-2026-08-02.md for the incidents that motivated them. */
+  /* ---------------------------------------------------------------------- */
+
+  interface FullNode {
+    id: string
+    name: string
+    type: string
+    typeVersion: number
+    parameters: Record<string, unknown>
+  }
+
+  function loadFull(file: string): { nodes: FullNode[]; connections: Workflow['connections'] } {
+    return JSON.parse(readFileSync(new URL(file, DIR), 'utf8'))
+  }
+
+  it.each(files)('%s has no Code node using an unsupported runtime global', (file) => {
+    const wf = loadFull(file)
+    for (const n of wf.nodes) {
+      if (n.type !== 'n8n-nodes-base.code') continue
+      const code = String(n.parameters.jsCode ?? '')
+      expect(code, `${n.name}: new URL( is not supported in this n8n runtime`).not.toContain('new URL(')
+      expect(code, `${n.name}: $env is not permitted (no Variables access)`).not.toMatch(/\$env\b/)
+      expect(code, `${n.name}: $vars is not permitted`).not.toMatch(/\$vars\b/)
+      expect(code, `${n.name}: process.env must never appear in workflow JSON`).not.toContain('process.env')
+    }
+  })
+
+  // Nodes whose name signals "this reads data" — each previously shipped
+  // pointed at the Supabase default operation (Create) with no field mapping,
+  // which silently attempts to insert an all-null row and throws a NOT NULL
+  // violation instead of returning the rows the workflow actually needs.
+  const READ_NAME_PATTERN = /^(get |get_|look up|re-read|sources for|all sources|settings$)/i
+
+  it.each(files)('%s: Supabase nodes named as reads are not left on Create', (file) => {
+    const wf = loadFull(file)
+    for (const n of wf.nodes) {
+      if (n.type !== 'n8n-nodes-base.supabase') continue
+      if (!READ_NAME_PATTERN.test(n.name)) continue
+      const op = n.parameters.operation
+      expect(['getAll', 'get'], `${file} :: "${n.name}" looks like a read but operation is ${JSON.stringify(op)}`).toContain(op)
+    }
+  })
+
+  it.each(files)('%s: every Supabase Create/Update node has a field mapping', (file) => {
+    const wf = loadFull(file)
+    for (const n of wf.nodes) {
+      if (n.type !== 'n8n-nodes-base.supabase') continue
+      const op = n.parameters.operation
+      if (op !== 'create' && op !== 'update' && op !== undefined) continue
+      if (READ_NAME_PATTERN.test(n.name)) continue // covered above
+      const hasFields = Boolean(n.parameters.dataToSend || n.parameters.fieldsUi)
+      expect(hasFields, `${file} :: "${n.name}" is a write with no field mapping`).toBe(true)
+    }
+  })
+
+  // Every Execute Workflow node in this system calls into a sub-workflow whose
+  // trigger reads $('...').first() — i.e. it is written for exactly one item.
+  // The node defaults to batching all input items into a single sub-workflow
+  // call ("once"); without an explicit per-item mode, item 2..N of any batch
+  // is silently dropped.
+  it.each(files)('%s: every Execute Workflow node runs once per item', (file) => {
+    const wf = loadFull(file)
+    for (const n of wf.nodes) {
+      if (n.type !== 'n8n-nodes-base.executeWorkflow') continue
+      expect(n.parameters.mode, `${file} :: "${n.name}" must set mode:"each"`).toBe('each')
+    }
+  })
+
+  it.each(files)('%s: Execute Workflow nodes reference one of the four known workflows', (file) => {
+    const wf = loadFull(file)
+    const KNOWN_IDS = new Set([
+      '9tBYdFdqdE76gQuQ', // 01 — Source Scheduler
+      'FHt8uKbBcixIWbWO', // 02 — Source Ingestion
+      '2AmFW6QzgNwSxaOU', // 03 — Publishing Gate
+      'HWSwJIZfuZVsErD8', // 04 — Retry, Health and Manual Run
+    ])
+    for (const n of wf.nodes) {
+      if (n.type !== 'n8n-nodes-base.executeWorkflow') continue
+      const target = (n.parameters.workflowId as { value?: string } | undefined)?.value
+      expect(target, `${file} :: "${n.name}" has no workflow target`).toBeTruthy()
+      expect(KNOWN_IDS.has(target ?? ''), `${file} :: "${n.name}" points at an unknown workflow id ${target}`).toBe(true)
+    }
+  })
+
+  it('the manual webhook requires native header authentication', () => {
+    const wf = loadFull('04-retry-health-manual.json')
+    const webhook = wf.nodes.find((n) => n.type === 'n8n-nodes-base.webhook')
+    expect(webhook, 'manual run webhook node not found').toBeDefined()
+    expect(webhook?.parameters.authentication).toBe('headerAuth')
+    expect(webhook?.parameters.responseMode, 'must use an explicit Respond to Webhook node to vary HTTP status per outcome').toBe(
+      'responseNode',
+    )
+  })
+
+  it('every branch reachable from the manual webhook ends at a Respond to Webhook node', () => {
+    const wf = loadFull('04-retry-health-manual.json')
+    const respondNodes = wf.nodes.filter((n) => n.type === 'n8n-nodes-base.respondToWebhook')
+    expect(respondNodes.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('normalised items always carry source_id, source_url and title_raw', () => {
+    const raw = readFileSync(new URL('02-source-ingestion.json', DIR), 'utf8')
+    const wf = loadFull('02-source-ingestion.json')
+    const n = wf.nodes.find((x) => x.name === 'Normalise RawItem')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain('source_id: src.id')
+    expect(code).toContain('source_url: sourceUrl')
+    expect(code).toContain('title_raw: titleRaw')
+    // a genuinely empty result must still leave one item behind, or every
+    // downstream node (including the log write) is skipped and the run
+    // vanishes without a workflow_logs row or a webhook response
+    expect(code, 'Normalise RawItem must not return [] on an empty result').toContain('__empty: true')
+    expect(raw).toContain('Has items?')
+  })
+
+  it('Workflow 04 does not re-embed the ingestion or publishing-gate pipeline', () => {
+    // 04 dispatches to 02 and 03 by Execute Workflow; it must never carry its
+    // own copy of their logic, or the two copies drift and only one of them
+    // gets fixed the next time a bug is found.
+    const wf = loadFull('04-retry-health-manual.json')
+    const names = new Set(wf.nodes.map((n) => n.name))
+    for (const foreign of ['Parser router', 'Classify with AI', 'Apply the five rules', 'Insert into archive']) {
+      expect(names.has(foreign), `04 must not contain "${foreign}" — that belongs to 02/03`).toBe(false)
+    }
+  })
+
+  it('Workflow 04 does not duplicate the hourly scheduler', () => {
+    // 01 already owns due-source selection; a second "Every hour" trigger in
+    // 04 double-schedules every source and double-fires on the DB constraint
+    // bug this test file already guards against.
+    const wf = loadFull('04-retry-health-manual.json')
+    const scheduleTriggers = wf.nodes.filter((n) => n.type === 'n8n-nodes-base.scheduleTrigger')
+    expect(scheduleTriggers).toHaveLength(1)
+    expect(scheduleTriggers[0]?.name).toBe('Every 15 minutes')
+  })
 })

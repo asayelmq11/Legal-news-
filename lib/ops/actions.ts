@@ -122,10 +122,51 @@ export async function triggerManualRun(
       signal: AbortSignal.timeout(15_000),
     })
 
+    // n8n answers with a structured contract (ok/status/processed/published/...)
+    // documented in n8n/workflows/04-retry-health-manual.json. The HTTP status
+    // alone cannot distinguish "started and running" from "ran and published
+    // nothing" from "rejected because the source doesn't exist", so the body
+    // must be read, not just response.ok.
+    let body: Record<string, unknown> | null = null
+    try {
+      body = await response.json()
+    } catch {
+      // Non-JSON body (e.g. n8n's own auth-rejection text) — fall through to
+      // the status-code-only handling below.
+    }
+
     if (!response.ok) {
+      const reason = typeof body?.reason === 'string' ? ` — ${body.reason}` : ''
       return {
         ok: false,
-        message: `رفض n8n الطلب (رمز ${response.status}). راجع سجل التنفيذ في n8n.`,
+        message: `رفض n8n الطلب (رمز ${response.status})${reason}. راجع سجل التنفيذ في n8n.`,
+      }
+    }
+
+    if (body && typeof body.status === 'string') {
+      if (body.status === 'skipped' || body.status === 'rejected') {
+        return {
+          ok: true,
+          message: `تم التخطي (${typeof body.reason === 'string' ? body.reason : 'قيد التشغيل بالفعل'}). معرّف المتابعة: ${correlationId}`,
+        }
+      }
+      if (body.status === 'empty') {
+        return {
+          ok: true,
+          message: `اكتمل التشغيل دون عناصر جديدة. معرّف المتابعة: ${correlationId}`,
+        }
+      }
+      if (body.status === 'completed') {
+        return {
+          ok: true,
+          message: `اكتمل التشغيل: ${Number(body.published ?? 0)} نُشر، ${Number(body.rejected ?? 0)} مرفوض. معرّف المتابعة: ${correlationId}`,
+        }
+      }
+      if (body.status === 'failed') {
+        return {
+          ok: false,
+          message: `فشل التشغيل. معرّف المتابعة: ${correlationId}. راجع سجل التنفيذ في n8n.`,
+        }
       }
     }
   } catch (cause) {
