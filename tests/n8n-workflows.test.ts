@@ -248,6 +248,8 @@ describe('n8n workflow exports', () => {
     type: string
     typeVersion: number
     parameters: Record<string, unknown>
+    alwaysOutputData?: boolean
+    onError?: string
   }
 
   function loadFull(file: string): { nodes: FullNode[]; connections: Workflow['connections'] } {
@@ -373,5 +375,152 @@ describe('n8n workflow exports', () => {
     const scheduleTriggers = wf.nodes.filter((n) => n.type === 'n8n-nodes-base.scheduleTrigger')
     expect(scheduleTriggers).toHaveLength(1)
     expect(scheduleTriggers[0]?.name).toBe('Every 15 minutes')
+  })
+
+  /* ---------------------------------------------------------------------- */
+  /* Async manual-run dispatch — the fix for the Next.js timeout.            */
+  /* lib/ops/dispatch.ts is the tested specification; these assert the       */
+  /* n8n side actually wires up what that spec requires.                     */
+  /* ---------------------------------------------------------------------- */
+
+  it('the manual-run dispatch is fired without waiting for Workflow 02', () => {
+    const wf = loadFull('04-retry-health-manual.json')
+    const dispatch = wf.nodes.find((n) => n.name === 'Manual ingestion')
+    expect(dispatch, 'Manual ingestion node not found').toBeDefined()
+    expect(dispatch?.type).toBe('n8n-nodes-base.executeWorkflow')
+    const options = (dispatch?.parameters.options ?? {}) as { waitForSubWorkflow?: boolean }
+    expect(options.waitForSubWorkflow, 'the webhook must not block on Workflow 02 finishing').toBe(false)
+  })
+
+  it('the manual-run response is never built by relying on Always Output Data', () => {
+    // alwaysOutputData is used exactly once, on the idempotency lookup, to
+    // survive a genuine zero-row result — not as a stand-in for an explicit
+    // Respond to Webhook decision.
+    const wf = loadFull('04-retry-health-manual.json')
+    const responseBuilders = ['Build manual run response', 'Build replay response', 'Build bad request response']
+    for (const name of responseBuilders) {
+      const n = wf.nodes.find((x) => x.name === name)
+      expect(n, `${name} not found`).toBeDefined()
+      expect(n?.alwaysOutputData, `${name} must not use alwaysOutputData as its mechanism`).not.toBe(true)
+    }
+    const dispatch = wf.nodes.find((n) => n.name === 'Manual ingestion')
+    expect(dispatch?.alwaysOutputData, 'the old alwaysOutputData patch on the dispatch node must be gone').not.toBe(
+      true,
+    )
+  })
+
+  it('a genuine zero-row idempotency lookup does not silently kill the branch', () => {
+    // "Check existing dispatch" legitimately returns zero rows on the common
+    // path (no prior dispatch for a fresh correlation_id); n8n does not run a
+    // downstream node whose every input was empty unless told to.
+    const wf = loadFull('04-retry-health-manual.json')
+    const lookup = wf.nodes.find((n) => n.name === 'Check existing dispatch')
+    expect(lookup?.alwaysOutputData).toBe(true)
+  })
+
+  it('the webhook answers with a distinct, documented code for every outcome', () => {
+    const wf = loadFull('04-retry-health-manual.json')
+    const respondNodes = wf.nodes.filter((n) => n.type === 'n8n-nodes-base.respondToWebhook')
+    expect(respondNodes.length).toBeGreaterThanOrEqual(2)
+
+    const badRequest = respondNodes.find((n) => n.name === 'Respond: bad request')
+    expect((badRequest?.parameters.options as { responseCode?: unknown })?.responseCode).toBe(400)
+
+    const manualRun = respondNodes.find((n) => n.name === 'Respond: manual run')
+    const code = String((manualRun?.parameters.options as { responseCode?: unknown })?.responseCode ?? '')
+    for (const status of ['202', '404', '409', '500']) {
+      expect(code, `manual run response code must branch on ${status}`).toContain(status)
+    }
+    expect(code).toContain("$json.status === 'accepted'")
+    expect(code).toContain("$json.reason === 'already_running'")
+  })
+
+  it('a malformed manual-run request is validated before any source is touched', () => {
+    const wf = loadFull('04-retry-health-manual.json')
+    const names = wf.nodes.map((n) => n.name)
+    expect(names).toContain('Validate request')
+    expect(names).toContain('Request valid?')
+    const raw = readFileSync(new URL('04-retry-health-manual.json', DIR), 'utf8')
+    for (const reason of [
+      'invalid_scope',
+      'missing_source_id',
+      'missing_country',
+      'missing_url',
+      'missing_dead_letter_id',
+    ]) {
+      expect(raw, `request validation must cover ${reason}`).toContain(reason)
+    }
+  })
+
+  it('a retried correlation_id is looked up before the scope is resolved again', () => {
+    const wf = loadFull('04-retry-health-manual.json')
+    const names = new Set(wf.nodes.map((n) => n.name))
+    expect(names.has('Check existing dispatch')).toBe(true)
+    expect(names.has('Has existing dispatch?')).toBe(true)
+    expect(names.has('Build replay response')).toBe(true)
+
+    const lookup = wf.nodes.find((n) => n.name === 'Check existing dispatch')
+    expect(lookup?.parameters.tableId).toBe('manual_run_dispatches')
+    const filters = lookup?.parameters.filters as { conditions?: Array<{ keyName?: string }> } | undefined
+    expect(filters?.conditions?.some((c) => c.keyName === 'correlation_id')).toBe(true)
+  })
+
+  it('an accepted dispatch is recorded in the idempotency ledger', () => {
+    const wf = loadFull('04-retry-health-manual.json')
+    const record = wf.nodes.find((n) => n.name === 'Record dispatch')
+    expect(record, 'Record dispatch node not found').toBeDefined()
+    expect(record?.parameters.tableId).toBe('manual_run_dispatches')
+    expect(record?.onError, 'a duplicate-key race must not surface as a failure').toBe('continueRegularOutput')
+
+    // it must only fire for an actual accept, never for a rejection/skip
+    const names = wf.nodes.map((n) => n.name)
+    expect(names).toContain('Should persist dispatch?')
+  })
+
+  it('the replay response is idempotent, not a fresh resolution', () => {
+    const raw = readFileSync(new URL('04-retry-health-manual.json', DIR), 'utf8')
+    // the replay must echo the STORED accepted_at, not compute `new Date()`
+    const wf = loadFull('04-retry-health-manual.json')
+    const replay = wf.nodes.find((n) => n.name === 'Build replay response')
+    const code = String(replay?.parameters.jsCode ?? '')
+    expect(code).not.toContain('new Date()')
+    expect(code).toContain('r.accepted_at')
+    expect(raw).toContain('Build replay response')
+  })
+
+  it('dispatch failures are folded into the response, not lost or double-counted', () => {
+    const wf = loadFull('04-retry-health-manual.json')
+    const build = wf.nodes.find((n) => n.name === 'Build manual run response')
+    const code = String(build?.parameters.jsCode ?? '')
+    expect(code).toContain('dispatch_failed')
+    expect(code).toContain('e.error')
+  })
+
+  /* ---------------------------------------------------------------------- */
+  /* Workflow 02 — correlation_id carried through to the final log row.      */
+  /* ---------------------------------------------------------------------- */
+
+  it('every workflow_logs write includes the correlation_id from the trigger item', () => {
+    const wf = loadFull('02-source-ingestion.json')
+    for (const name of ['Summarise run', 'Build empty run summary', 'Build failed run summary']) {
+      const n = wf.nodes.find((x) => x.name === name)
+      expect(n, `${name} not found`).toBeDefined()
+      const code = String(n?.parameters.jsCode ?? '')
+      expect(code, `${name} must read correlation_id from the trigger item`).toContain(
+        "$('Called by scheduler').first().json.correlation_id",
+      )
+      expect(code, `${name} must write correlation_id onto the workflow_logs row`).toContain(
+        'correlation_id: correlationId',
+      )
+    }
+  })
+
+  it('a scheduled run (no correlation_id in the trigger item) still logs cleanly', () => {
+    // trigger_type already defaults the same way; correlation_id must default
+    // to null rather than throwing on `undefined.correlation_id`.
+    const wf = loadFull('02-source-ingestion.json')
+    const n = wf.nodes.find((x) => x.name === 'Summarise run')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain('correlation_id || null')
   })
 })

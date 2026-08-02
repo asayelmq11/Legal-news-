@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/auth/session'
 import { createClient } from '@/lib/supabase/server'
 import { getServerEnv, isManualTriggerConfigured } from '@/lib/env'
+import { manualRunResponseSchema } from '@/lib/ops/dispatch'
 import type { ActionState } from '@/lib/actions/state'
 
 /**
@@ -17,6 +18,16 @@ import type { ActionState } from '@/lib/actions/state'
  * separate "simplified" path would be a second set of rules to keep in step,
  * and the one that gets used in an emergency is the one least likely to be
  * correct.
+ *
+ * ┌─ THIS DOES NOT WAIT FOR INGESTION TO FINISH ───────────────────────────────┐
+ * │ Workflow 04 authenticates, validates and resolves the request, dispatches  │
+ * │ Workflow 02 WITHOUT waiting for it, and answers 202 immediately. RSS       │
+ * │ parsing, AI classification, publishing and the Supabase writes all happen │
+ * │ after this function has already returned — that chain used to run inside  │
+ * │ the request and routinely exceeded the server-action timeout. Success     │
+ * │ here means "accepted for processing", not "published". The final outcome  │
+ * │ lands in workflow_logs, tagged with the same correlation_id.               │
+ * └────────────────────────────────────────────────────────────────────────────┘
  */
 
 const runSchema = z.object({
@@ -95,7 +106,9 @@ export async function triggerManualRun(
   }
 
   // A single, unambiguous id for this run, echoed back and written to
-  // workflow_logs by n8n so the UI can follow it.
+  // workflow_logs by n8n so the UI can follow it. Also the idempotency key:
+  // n8n answers a retry carrying the same id with the original acceptance
+  // instead of dispatching Workflow 02 a second time.
   const correlationId = crypto.randomUUID()
   const env = getServerEnv()
 
@@ -119,55 +132,79 @@ export async function triggerManualRun(
         requested_by: admin.id,
         requested_at: new Date().toISOString(),
       }),
+      // Workflow 04 answers as soon as the request is validated and Workflow
+      // 02 is dispatched — it never waits for ingestion to finish, so this
+      // is headroom for a slow authentication/DB round-trip, not a wait for
+      // a full run. If this ever times out, the fix is n8n, not a bigger
+      // number here.
       signal: AbortSignal.timeout(15_000),
     })
 
-    // n8n answers with a structured contract (ok/status/processed/published/...)
-    // documented in n8n/workflows/04-retry-health-manual.json. The HTTP status
-    // alone cannot distinguish "started and running" from "ran and published
-    // nothing" from "rejected because the source doesn't exist", so the body
-    // must be read, not just response.ok.
-    let body: Record<string, unknown> | null = null
+    // n8n answers with the contract in lib/ops/dispatch.ts (ok/status/
+    // correlation_id/source_id/accepted_at/...), documented in
+    // n8n/workflows/04-retry-health-manual.json. The HTTP status alone
+    // cannot distinguish "accepted" from "already running" from "rejected
+    // because the source doesn't exist", so the body must be read, not just
+    // response.ok — a 400/404/409/500 can still carry a structured body.
+    let rawBody: unknown = null
     try {
-      body = await response.json()
+      rawBody = await response.json()
     } catch {
       // Non-JSON body (e.g. n8n's own auth-rejection text) — fall through to
       // the status-code-only handling below.
     }
 
-    if (!response.ok) {
-      const reason = typeof body?.reason === 'string' ? ` — ${body.reason}` : ''
+    const parsed = manualRunResponseSchema.safeParse(rawBody)
+
+    if (!parsed.success) {
       return {
         ok: false,
-        message: `رفض n8n الطلب (رمز ${response.status})${reason}. راجع سجل التنفيذ في n8n.`,
+        message: `استجابة غير متوقعة من n8n (رمز ${response.status}). راجع سجل التنفيذ في n8n.`,
       }
     }
 
-    if (body && typeof body.status === 'string') {
-      if (body.status === 'skipped' || body.status === 'rejected') {
-        return {
-          ok: true,
-          message: `تم التخطي (${typeof body.reason === 'string' ? body.reason : 'قيد التشغيل بالفعل'}). معرّف المتابعة: ${correlationId}`,
-        }
+    const body = parsed.data
+
+    if (body.status === 'accepted') {
+      // The request was accepted and Workflow 02 dispatched — NOT that
+      // ingestion has finished. Nothing here waited for RSS parsing, AI
+      // classification or publishing, so this can never time out on their
+      // account.
+      revalidatePath('/ops')
+      revalidatePath('/sources')
+      return {
+        ok: true,
+        message: `قُبل التشغيل وجارٍ تنفيذه في الخلفية. معرّف المتابعة: ${body.correlation_id}`,
       }
-      if (body.status === 'empty') {
-        return {
-          ok: true,
-          message: `اكتمل التشغيل دون عناصر جديدة. معرّف المتابعة: ${correlationId}`,
-        }
+    }
+
+    if (body.status === 'skipped') {
+      return {
+        ok: true,
+        message: `تم التخطي (${body.reason ?? 'قيد التشغيل بالفعل'}). معرّف المتابعة: ${body.correlation_id}`,
       }
-      if (body.status === 'completed') {
-        return {
-          ok: true,
-          message: `اكتمل التشغيل: ${Number(body.published ?? 0)} نُشر، ${Number(body.rejected ?? 0)} مرفوض. معرّف المتابعة: ${correlationId}`,
-        }
+    }
+
+    if (body.status === 'rejected') {
+      return {
+        ok: false,
+        message: `رفض n8n الطلب (${body.reason ?? 'source_not_found'}). معرّف المتابعة: ${body.correlation_id}`,
       }
-      if (body.status === 'failed') {
-        return {
-          ok: false,
-          message: `فشل التشغيل. معرّف المتابعة: ${correlationId}. راجع سجل التنفيذ في n8n.`,
-        }
+    }
+
+    if (body.status === 'failed') {
+      return {
+        ok: false,
+        message: `تعذّر بدء التشغيل. معرّف المتابعة: ${body.correlation_id}. راجع سجل التنفيذ في n8n.`,
       }
+    }
+
+    // status === 'invalid_request' — n8n's own validation rejected the
+    // payload; surfaced verbatim rather than swallowed, since it usually
+    // means this action and the webhook have drifted out of sync.
+    return {
+      ok: false,
+      message: `رفض n8n الطلب (${body.reason ?? 'invalid_request'}).`,
     }
   } catch (cause) {
     // The message is an infrastructure detail, not a secret — the URL and key
@@ -176,13 +213,6 @@ export async function triggerManualRun(
       ok: false,
       message: `تعذّر الاتصال بـ n8n: ${cause instanceof Error ? cause.message : 'خطأ غير معروف'}`,
     }
-  }
-
-  revalidatePath('/ops')
-  revalidatePath('/sources')
-  return {
-    ok: true,
-    message: `بدأ التشغيل. معرّف المتابعة: ${correlationId}`,
   }
 }
 

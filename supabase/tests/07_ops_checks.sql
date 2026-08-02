@@ -2,13 +2,13 @@
 -- Operational reliability checks (M10)
 -- =============================================================================
 
-\echo '── O1. eight tables; the two new ones are the ops tables ───────────────'
+\echo '── O1. nine tables; manual_run_dispatches is the async-dispatch ledger ─'
 do $$
 declare n int; found text; begin
   select count(*), string_agg(tablename, ', ' order by tablename) into n, found
   from pg_tables where schemaname = 'public';
-  if n <> 8 then raise exception 'expected 8 tables, found % (%)', n, found; end if;
-  raise notice 'PASS — 8 tables: %', found;
+  if n <> 9 then raise exception 'expected 9 tables, found % (%)', n, found; end if;
+  raise notice 'PASS — 9 tables: %', found;
 end $$;
 
 \echo '── O2. still exactly one function, and no triggers ─────────────────────'
@@ -279,6 +279,59 @@ declare sid uuid; begin
     raise exception 'a non-positive silence window should be rejected';
   exception when check_violation then null; end;
   raise notice 'PASS — per-source silence window stored and validated';
+end $$;
+
+\echo '── O17. a correlation_id is only ever recorded once (dispatch idempotency)'
+do $$
+declare sid uuid; n int; begin
+  select id into sid from public.sources where authority_en='ZZ Fixture Source';
+
+  insert into public.manual_run_dispatches (correlation_id, scope, source_id, accepted_sources)
+  values ('11111111-1111-1111-1111-111111111111', 'source', sid, jsonb_build_array(sid));
+
+  begin
+    insert into public.manual_run_dispatches (correlation_id, scope, source_id, accepted_sources)
+    values ('11111111-1111-1111-1111-111111111111', 'source', sid, jsonb_build_array(sid));
+    raise exception 'a second row for the same correlation_id should be rejected';
+  exception when unique_violation then null; end;
+
+  select count(*) into n from public.manual_run_dispatches
+   where correlation_id = '11111111-1111-1111-1111-111111111111';
+  if n <> 1 then raise exception 'expected exactly one dispatch row, found %', n; end if;
+  raise notice 'PASS — a retried correlation_id cannot create a second dispatch row';
+end $$;
+
+\echo '── O18. manual_run_dispatches is n8n-written, app-read-only ─────────────'
+do $$
+declare r record; begin
+  for r in
+    select rl.role_name, pr.priv
+    from unnest(array['anon','authenticated']) as rl(role_name)
+    cross join unnest(array['INSERT','UPDATE','DELETE']) as pr(priv)
+  loop
+    if has_table_privilege(r.role_name, 'public.manual_run_dispatches', r.priv) then
+      raise exception 'SEAL BREACH: % has % on manual_run_dispatches', r.role_name, r.priv;
+    end if;
+  end loop;
+  raise notice 'PASS — manual_run_dispatches has no app write path';
+end $$;
+
+\echo '── O19. a workflow_logs row carries the correlation_id through to the end'
+do $$
+declare sid uuid; wid uuid; begin
+  select id into sid from public.sources where authority_en='ZZ Fixture Source';
+
+  insert into public.workflow_logs
+    (workflow_name, source_id, trigger_type, status, correlation_id)
+  values
+    ('02-source-ingestion', sid, 'manual', 'success', '22222222-2222-2222-2222-222222222222')
+  returning id into wid;
+
+  if (select correlation_id from public.workflow_logs where id = wid)
+     <> '22222222-2222-2222-2222-222222222222' then
+    raise exception 'correlation_id not stored on the workflow_logs row';
+  end if;
+  raise notice 'PASS — the final workflow_logs row keeps the dispatch correlation_id';
 end $$;
 
 \echo ''

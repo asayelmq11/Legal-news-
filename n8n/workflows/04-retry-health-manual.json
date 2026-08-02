@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-02T07:38:46.077Z",
+  "updatedAt": "2026-08-02T12:56:31.189Z",
   "createdAt": "2026-08-01T15:13:12.884Z",
   "id": "HWSwJIZfuZVsErD8",
   "name": "04 — Retry, Health and Manual Run",
@@ -393,15 +393,162 @@
     },
     {
       "parameters": {
-        "jsCode": "// ── MANUAL RUN RESOLVER ────────────────────────────────────────────────────\n// Verifies the signed request and resolves the requested scope to a source set.\n//\n// The resolved sources go into the SAME ingestion workflow the scheduler uses.\n// There is no simplified manual path: a second pipeline would be a second set\n// of rules to keep in step, and the one used in an emergency is the one least\n// likely to be right.\n\nconst body = $('Manual run webhook').first().json.body || {};\nconst headers = $('Manual run webhook').first().json.headers || {};\n\nconst all = $input.all().map(i => i.json).filter(r => typeof r.base_url === 'string');\nconst scope = body.scope;\nconst now = Date.now();\n\nlet selected = [];\nif (scope === 'source') selected = all.filter(s => s.id === body.source_id);\nelse if (scope === 'country') selected = all.filter(s => s.country === body.country);\nelse if (scope === 'all' || scope === 'drain') selected = all;\nelse if (scope === 'url' || scope === 'replay') {\n  selected = body.source_id ? all.filter(s => s.id === body.source_id) : all;\n}\n\n// Only what the scheduler would run anyway. A manual run cannot activate a\n// source the database refuses to activate.\nselected = selected.filter(s => s.active && s.config_status === 'verified' && s.parser_type !== 'unknown');\n\nconst runnable = [];\nconst skipped = [];\n\nfor (const s of selected) {\n  const locked = s.lock_expires_at && new Date(s.lock_expires_at).getTime() > now;\n  if (locked && !body.force) {\n    skipped.push({ json: { skipped: true, reason: 'already_running', source_id: s.id, authority_ar: s.authority_ar } });\n    continue;\n  }\n  runnable.push({ json: {\n    source: s,\n    trigger_type: 'manual',\n    dispatched_at: new Date().toISOString(),\n    correlation_id: body.correlation_id || null,\n    requested_by: body.requested_by || null,\n    single_url: scope === 'url' ? body.url : null,\n    dead_letter_id: scope === 'replay' ? body.dead_letter_id : null,\n    forced: !!body.force,\n  }});\n}\n\nconsole.log(JSON.stringify({\n  stage: 'manual_run', correlation_id: body.correlation_id,\n  scope, runnable: runnable.length, skipped: skipped.length,\n}));\n\nif (runnable.length === 0 && skipped.length === 0) {\n  // Nothing matched the requested scope at all: distinguish \"no such source\"\n  // from \"no active/verified sources for this scope\" so the webhook can\n  // return 404 vs 200 instead of silently answering with nothing, which\n  // previously left the webhook with no data to respond with.\n  const requestedButMissing =\n    (scope === 'source' || scope === 'url' || scope === 'replay') &&\n    body.source_id &&\n    !all.some((s) => s.id === body.source_id);\n\n  return [{ json: {\n    skipped: true,\n    not_found: requestedButMissing,\n    reason: requestedButMissing ? 'source_not_found' : 'no_matching_sources',\n    source_id: body.source_id || null,\n    scope,\n  } }];\n}\n\nreturn [...runnable, ...skipped];"
+        "jsCode": "// ── REQUEST VALIDATION ──────────────────────────────────────────────────────\n// Mirrors lib/ops/dispatch.ts validateManualRunBody, the tested specification.\n// Rejected here, before any source is touched, so the webhook answers 400\n// instead of doing nothing or failing three nodes later. The webhook is\n// reachable directly by anyone holding N8N_TRIGGER_SECRET, not only through\n// the Next.js form, so it cannot trust that a caller already validated.\n\nconst body = $('Manual run webhook').first().json.body || {};\nconst SCOPES = ['source', 'country', 'all', 'url', 'replay', 'drain'];\n\nconst scope = body.scope;\nlet invalidReason = null;\nif (typeof scope !== 'string' || !SCOPES.includes(scope)) invalidReason = 'invalid_scope';\nelse if (scope === 'source' && !body.source_id) invalidReason = 'missing_source_id';\nelse if (scope === 'country' && !body.country) invalidReason = 'missing_country';\nelse if (scope === 'url' && !body.url) invalidReason = 'missing_url';\nelse if (scope === 'replay' && !body.dead_letter_id) invalidReason = 'missing_dead_letter_id';\n\nif (invalidReason) {\n  return [{ json: { __valid: false, reason: invalidReason, correlation_id: body.correlation_id || null } }];\n}\n\n// correlation_id is always supplied by the Next.js caller (lib/ops/actions.ts);\n// the fallback only covers a direct webhook call made without one.\nconst correlationId = body.correlation_id\n  || ('m-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10));\n\nreturn [{ json: {\n  __valid: true,\n  scope,\n  source_id: body.source_id || null,\n  country: body.country || null,\n  url: body.url || null,\n  dead_letter_id: body.dead_letter_id || null,\n  force: !!body.force,\n  correlation_id: correlationId,\n  requested_by: body.requested_by || null,\n  requested_at: body.requested_at || new Date().toISOString(),\n}}];"
       },
-      "id": "0d0b415c-645b-42a5-baba-2f5b8cb1ac69",
-      "name": "Resolve manual run",
+      "id": "2f360e87-467d-40f9-ac11-a355b0f11b63",
+      "name": "Validate request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
+        -912,
+        1632
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.__valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "abf2dfbb-21af-4802-a707-0c9bd7859c49",
+      "name": "Request valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
         -688,
         1632
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// A malformed manual-run request — rejected before any source is touched.\nconst v = $input.first().json;\nreturn [{ json: {\n  ok: false,\n  status: 'invalid_request',\n  correlation_id: v.correlation_id || null,\n  reason: v.reason,\n  accepted_at: new Date().toISOString(),\n}}];"
+      },
+      "id": "718912ac-2e80-43f5-a135-3f5f3e5a5c55",
+      "name": "Build bad request response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        1760
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "a5071159-6049-4a14-9b6d-1523f3ca3a15",
+      "name": "Respond: bad request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        1760
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "manual_run_dispatches",
+        "returnAll": true,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "correlation_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Validate request').first().json.correlation_id }}"
+            }
+          ]
+        }
+      },
+      "id": "a4fddf56-5cd9-4074-bc44-2230927a0b24",
+      "name": "Check existing dispatch",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -464,
+        1632
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "10zDIxzQYFnJuOmh",
+          "name": "Supabase account 2"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Idempotent replay: a correlation_id already accepted answers with the\n// ORIGINAL outcome instead of resolving the scope (and dispatching) again.\n//\n// \"Check existing dispatch\" runs with alwaysOutputData, so a genuine\n// zero-row result still arrives as one placeholder item with no\n// correlation_id — filtered out here rather than trusted by item count.\nconst rows = $input.all().map(i => i.json).filter(r => r && r.correlation_id);\nif (rows.length === 0) return [{ json: { __replay: false } }];\nconst r = rows[0];\nreturn [{ json: {\n  __replay: true,\n  correlation_id: r.correlation_id,\n  source_id: r.source_id,\n  accepted_at: r.accepted_at,\n  accepted_sources: r.accepted_sources || [],\n  skipped_sources: r.skipped_sources || [],\n}}];"
+      },
+      "id": "881d1d66-5d51-43c2-9bc7-2ee7d29a2d24",
+      "name": "Has existing dispatch?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        1632
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.__replay }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "708a0b50-6571-447d-8770-ad23c6a508ff",
+      "name": "Already dispatched?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -16,
+        1632
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reshapes the stored dispatch row into the same contract a fresh accept\n// would return — same correlation_id, same accepted_at, same sources. This is\n// what makes correlation_id an idempotency key, not just a tracing label.\nconst r = $input.first().json;\nreturn [{ json: {\n  ok: true,\n  status: 'accepted',\n  correlation_id: r.correlation_id,\n  source_id: r.source_id,\n  accepted_at: r.accepted_at,\n  accepted_sources: r.accepted_sources,\n  skipped_sources: r.skipped_sources,\n}}];"
+      },
+      "id": "26c6ac6f-de43-4b72-90ea-af7170ed4d0f",
+      "name": "Build replay response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        1520
       ]
     },
     {
@@ -410,13 +557,13 @@
         "tableId": "sources",
         "returnAll": true
       },
-      "id": "0874632b-25dd-4f3d-99c5-1d2ba7c7d34e",
+      "id": "2dfb3854-4422-4a4d-ae9f-7d4c860daabb",
       "name": "Sources for manual run",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
       "position": [
-        -912,
-        1632
+        208,
+        1712
       ],
       "credentials": {
         "supabaseApi": {
@@ -424,6 +571,32 @@
           "name": "Supabase account 2"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "// \"Record dispatch\" only writes the idempotency ledger; ITS output is the\n// inserted row, not the response. Restore the response actually built for\n// the caller, unaffected by whatever the insert (or its onError passthrough\n// on a duplicate-key race) happened to return.\nreturn [{ json: $('Build manual run response').first().json }];"
+      },
+      "id": "17dff977-f88a-4298-842e-29e90e089e23",
+      "name": "Finalize accepted response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── MANUAL RUN RESOLVER ────────────────────────────────────────────────────\n// Resolves the requested scope to a source set and decides which are runnable\n// now versus already locked. The resolved sources go into the SAME ingestion\n// workflow the scheduler uses — there is no simplified manual path: a second\n// pipeline would be a second set of rules to keep in step, and the one used\n// in an emergency is the one least likely to be right.\n\nconst req = $('Validate request').first().json;\nconst all = $input.all().map(i => i.json).filter(r => typeof r.base_url === 'string');\nconst scope = req.scope;\nconst now = Date.now();\n\nlet selected = [];\nif (scope === 'source') selected = all.filter(s => s.id === req.source_id);\nelse if (scope === 'country') selected = all.filter(s => s.country === req.country);\nelse if (scope === 'all' || scope === 'drain') selected = all;\nelse if (scope === 'url' || scope === 'replay') {\n  selected = req.source_id ? all.filter(s => s.id === req.source_id) : all;\n}\n\n// Only what the scheduler would run anyway. A manual run cannot activate a\n// source the database refuses to activate.\nselected = selected.filter(s => s.active && s.config_status === 'verified' && s.parser_type !== 'unknown');\n\nconst runnable = [];\nconst skipped = [];\n\nfor (const s of selected) {\n  const locked = s.lock_expires_at && new Date(s.lock_expires_at).getTime() > now;\n  if (locked && !req.force) {\n    skipped.push({ json: { skipped: true, reason: 'already_running', source_id: s.id, authority_ar: s.authority_ar } });\n    continue;\n  }\n  runnable.push({ json: {\n    source: s,\n    trigger_type: 'manual',\n    dispatched_at: new Date().toISOString(),\n    correlation_id: req.correlation_id,\n    requested_by: req.requested_by,\n    single_url: scope === 'url' ? req.url : null,\n    dead_letter_id: scope === 'replay' ? req.dead_letter_id : null,\n    forced: !!req.force,\n  }});\n}\n\nconsole.log(JSON.stringify({\n  stage: 'manual_run', correlation_id: req.correlation_id,\n  scope, runnable: runnable.length, skipped: skipped.length,\n}));\n\nif (runnable.length === 0 && skipped.length === 0) {\n  // Nothing matched the requested scope at all: distinguish \"no such source\"\n  // from \"no active/verified sources for this scope\" so the webhook can\n  // answer 404 vs 200 instead of silently answering with nothing.\n  const requestedButMissing =\n    (scope === 'source' || scope === 'url' || scope === 'replay') &&\n    req.source_id &&\n    !all.some((s) => s.id === req.source_id);\n\n  return [{ json: {\n    skipped: true,\n    not_found: requestedButMissing,\n    reason: requestedButMissing ? 'source_not_found' : 'no_matching_sources',\n    source_id: req.source_id || null,\n    scope,\n  } }];\n}\n\nreturn [...runnable, ...skipped];"
+      },
+      "id": "b2493249-ae6c-45fe-985f-64a3458104fd",
+      "name": "Resolve manual run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        1712
+      ]
     },
     {
       "parameters": {
@@ -447,13 +620,13 @@
         },
         "options": {}
       },
-      "id": "1bf5b284-ba32-4251-ba0f-d4bf47e037fb",
+      "id": "9bdc8ed2-f381-40e4-a250-356e3df83d12",
       "name": "Runnable?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -464,
-        1664
+        656,
+        1712
       ]
     },
     {
@@ -474,78 +647,126 @@
           "convertFieldsToString": true
         },
         "options": {
-          "waitForSubWorkflow": true
+          "waitForSubWorkflow": false
         },
         "mode": "each"
       },
-      "id": "b4478643-42bb-46ae-b14f-60ac98a2d75f",
+      "id": "b921546b-ccb0-46ce-b82b-32fc4c05fd78",
       "name": "Manual ingestion",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        -240,
-        1568
+        880,
+        1632
       ],
-      "alwaysOutputData": true
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Manual run outcome, returned to the caller and logged.\nconst results = $input.all().map(i => i.json);\nconst processed = results.length;\nconst published = results.reduce((a, r) => a + (r.items_published || 0), 0);\nconst rejected = results.reduce((a, r) => a + (r.items_rejected || 0), 0);\nconst failed = results.filter(r => r.status === 'failed').length;\nconst duplicates = results.reduce((a, r) => a + ((r.rejection_reasons || {}).duplicate || 0), 0);\nconst correlationId = $('Manual run webhook').first().json.body?.correlation_id || null;\n\nreturn [{ json: {\n  ok: true,\n  status: processed === 0 ? 'empty' : 'completed',\n  execution_id: String($execution.id),\n  correlation_id: correlationId,\n  processed,\n  published,\n  rejected,\n  duplicates,\n  failed,\n  finished_at: new Date().toISOString(),\n}}];\n"
+        "mode": "append",
+        "options": {}
       },
-      "id": "5d0afd03-f338-4446-885c-171f82697343",
-      "name": "Manual run result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "816e961f-f2a7-4240-be62-df8c556e0a30",
+      "name": "Merge for response",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
       "position": [
-        16,
+        1104,
         1712
       ]
     },
     {
       "parameters": {
-        "jsCode": "// A source already running, or a scope that matched nothing, is reported as\n// a deliberate outcome rather than an error.\nconst correlationId = $('Manual run webhook').first().json.body?.correlation_id || null;\nconst items = $input.all().map(i => i.json);\nconst first = items[0] || {};\n\nreturn [{ json: {\n  ok: !first.not_found,\n  status: first.not_found ? 'rejected' : 'skipped',\n  execution_id: String($execution.id),\n  correlation_id: correlationId,\n  processed: 0,\n  published: 0,\n  rejected: 0,\n  duplicates: 0,\n  failed: 0,\n  reason: first.reason || 'already_running',\n  details: items.map((e) => ({ source_id: e.source_id, reason: e.reason, authority_ar: e.authority_ar })),\n  finished_at: new Date().toISOString(),\n}}];\n"
+        "jsCode": "// ── MANUAL RUN RESPONSE ─────────────────────────────────────────────────────\n// Aggregates the resolved sources (dispatched and skipped) into the single\n// response contract returned to the caller. Mirrors lib/ops/dispatch.ts —\n// resolveManualRun / foldDispatchFailures — the tested specification.\n\nconst req = $('Validate request').first().json;\nconst items = $input.all().map(i => i.json);\nconst now = new Date().toISOString();\n\n// A request whose scope matched nothing, or named a source that does not\n// exist, arrives as ONE marker item.\nif (items.length === 1 && items[0].skipped && (items[0].reason === 'no_matching_sources' || items[0].not_found)) {\n  const marker = items[0];\n  if (marker.not_found) {\n    return [{ json: {\n      ok: false, status: 'rejected', correlation_id: req.correlation_id,\n      source_id: marker.source_id || null, accepted_at: now, reason: 'source_not_found',\n    }}];\n  }\n  return [{ json: {\n    ok: true, status: 'skipped', correlation_id: req.correlation_id,\n    source_id: req.source_id, accepted_at: now, reason: 'no_matching_sources',\n  }}];\n}\n\nconst accepted = [];\nconst skipped = [];\n\nfor (const e of items) {\n  if (e.skipped) {\n    skipped.push({ source_id: e.source_id, reason: e.reason || 'already_running' });\n    continue;\n  }\n  // n8n leaves .error on an item that failed to even start when the dispatch\n  // node's onError is continueRegularOutput — reported, not silently lost.\n  if (e.error) {\n    skipped.push({ source_id: (e.source && e.source.id) || null, reason: 'dispatch_failed' });\n    continue;\n  }\n  accepted.push(e.source.id);\n}\n\n// Only when EVERY accepted candidate failed to start does the response\n// become a genuine dispatch failure (500). One bad source id in a\n// country/all batch must not turn a mostly-successful run into a 500.\nif (accepted.length === 0 && skipped.length > 0 && skipped.every(s => s.reason === 'dispatch_failed')) {\n  return [{ json: {\n    ok: false, status: 'failed', correlation_id: req.correlation_id,\n    source_id: req.source_id, accepted_at: now, reason: 'dispatch_failed', skipped_sources: skipped,\n  }}];\n}\n\nif (accepted.length === 0) {\n  return [{ json: {\n    ok: true, status: 'skipped', correlation_id: req.correlation_id,\n    source_id: req.source_id, accepted_at: now, reason: 'already_running', skipped_sources: skipped,\n  }}];\n}\n\nreturn [{ json: {\n  ok: true,\n  status: 'accepted',\n  correlation_id: req.correlation_id,\n  source_id: req.scope === 'source' ? (req.source_id || accepted[0]) : (accepted.length === 1 ? accepted[0] : null),\n  accepted_at: now,\n  accepted_sources: accepted,\n  skipped_sources: skipped,\n  scope: req.scope,\n}}];"
       },
-      "id": "b2621fc6-37cf-41d7-9bba-bc1e32e910db",
-      "name": "Already running",
+      "id": "f176f026-ebe8-48ee-8d60-50ccbb9a50a6",
+      "name": "Build manual run response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -240,
-        1728
+        1328,
+        1712
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "accepted",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8e992426-0464-49fc-81dd-5f02754c1d47",
+      "name": "Should persist dispatch?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1552,
+        1712
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Shapes the accepted outcome into exactly the manual_run_dispatches\n// columns — the idempotency ledger a retried correlation_id is answered from.\nconst r = $input.first().json;\nconst req = $('Validate request').first().json;\nreturn [{ json: {\n  correlation_id: r.correlation_id,\n  source_id: r.source_id,\n  scope: r.scope,\n  accepted_sources: r.accepted_sources || [],\n  skipped_sources: r.skipped_sources || [],\n  accepted_at: r.accepted_at,\n  requested_by: req.requested_by,\n}}];"
+      },
+      "id": "d7b4acc9-29bd-485a-b4e5-3750c42deb92",
+      "name": "Prepare dispatch record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "manual_run_dispatches",
+        "dataToSend": "autoMapInputData"
+      },
+      "id": "d4254e43-865b-4341-921a-a0bb3783b41f",
+      "name": "Record dispatch",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        1616
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "10zDIxzQYFnJuOmh",
+          "name": "Supabase account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ $json }}",
         "options": {
-          "responseCode": "={{ $json.ok ? 200 : 500 }}"
+          "responseCode": "={{ $json.status === 'failed' ? 500 : ($json.status === 'rejected' ? 404 : ($json.status === 'accepted' ? 202 : ($json.reason === 'already_running' ? 409 : 200))) }}"
         }
       },
-      "id": "d54e2d03-26a3-4c52-b526-99303d755a21",
-      "name": "Respond: run result",
+      "id": "7cd927d2-0090-4f8b-acb2-12d180cde773",
+      "name": "Respond: manual run",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        3600,
-        700
-      ]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}",
-        "options": {
-          "responseCode": "={{ $json.status === 'rejected' ? 404 : 200 }}"
-        }
-      },
-      "id": "9d947e2a-9360-44a6-87e0-4b894e5c2a7f",
-      "name": "Respond: skipped",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        3600,
-        900
+        2448,
+        1712
       ]
     }
   ],
@@ -721,7 +942,98 @@
       "main": [
         [
           {
+            "node": "Validate request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate request": {
+      "main": [
+        [
+          {
+            "node": "Request valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request valid?": {
+      "main": [
+        [
+          {
+            "node": "Check existing dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build bad request response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build bad request response": {
+      "main": [
+        [
+          {
+            "node": "Respond: bad request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check existing dispatch": {
+      "main": [
+        [
+          {
+            "node": "Has existing dispatch?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has existing dispatch?": {
+      "main": [
+        [
+          {
+            "node": "Already dispatched?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already dispatched?": {
+      "main": [
+        [
+          {
+            "node": "Build replay response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Sources for manual run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build replay response": {
+      "main": [
+        [
+          {
+            "node": "Respond: manual run",
             "type": "main",
             "index": 0
           }
@@ -761,9 +1073,9 @@
         ],
         [
           {
-            "node": "Already running",
+            "node": "Merge for response",
             "type": "main",
-            "index": 0
+            "index": 1
           }
         ]
       ]
@@ -772,29 +1084,80 @@
       "main": [
         [
           {
-            "node": "Manual run result",
+            "node": "Merge for response",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Manual run result": {
+    "Merge for response": {
       "main": [
         [
           {
-            "node": "Respond: run result",
+            "node": "Build manual run response",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Already running": {
+    "Build manual run response": {
       "main": [
         [
           {
-            "node": "Respond: skipped",
+            "node": "Should persist dispatch?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should persist dispatch?": {
+      "main": [
+        [
+          {
+            "node": "Prepare dispatch record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: manual run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare dispatch record": {
+      "main": [
+        [
+          {
+            "node": "Record dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record dispatch": {
+      "main": [
+        [
+          {
+            "node": "Finalize accepted response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize accepted response": {
+      "main": [
+        [
+          {
+            "node": "Respond: manual run",
             "type": "main",
             "index": 0
           }
@@ -820,9 +1183,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "ce88f27f-c8f2-409a-bf86-68ef935a6fa8",
-  "activeVersionId": "ce88f27f-c8f2-409a-bf86-68ef935a6fa8",
-  "versionCounter": 48,
+  "versionId": "751eb85e-2126-42ce-bc62-d1707c5cc110",
+  "activeVersionId": "751eb85e-2126-42ce-bc62-d1707c5cc110",
+  "versionCounter": 63,
   "triggerCount": 2,
   "shared": [
     {
@@ -891,9 +1254,9 @@
     }
   ],
   "activeVersion": {
-    "updatedAt": "2026-08-02T07:38:46.079Z",
-    "createdAt": "2026-08-02T07:38:46.079Z",
-    "versionId": "ce88f27f-c8f2-409a-bf86-68ef935a6fa8",
+    "updatedAt": "2026-08-02T12:56:31.193Z",
+    "createdAt": "2026-08-02T12:56:31.193Z",
+    "versionId": "751eb85e-2126-42ce-bc62-d1707c5cc110",
     "workflowId": "HWSwJIZfuZVsErD8",
     "nodes": [
       {
@@ -1282,15 +1645,162 @@
       },
       {
         "parameters": {
-          "jsCode": "// ── MANUAL RUN RESOLVER ────────────────────────────────────────────────────\n// Verifies the signed request and resolves the requested scope to a source set.\n//\n// The resolved sources go into the SAME ingestion workflow the scheduler uses.\n// There is no simplified manual path: a second pipeline would be a second set\n// of rules to keep in step, and the one used in an emergency is the one least\n// likely to be right.\n\nconst body = $('Manual run webhook').first().json.body || {};\nconst headers = $('Manual run webhook').first().json.headers || {};\n\nconst all = $input.all().map(i => i.json).filter(r => typeof r.base_url === 'string');\nconst scope = body.scope;\nconst now = Date.now();\n\nlet selected = [];\nif (scope === 'source') selected = all.filter(s => s.id === body.source_id);\nelse if (scope === 'country') selected = all.filter(s => s.country === body.country);\nelse if (scope === 'all' || scope === 'drain') selected = all;\nelse if (scope === 'url' || scope === 'replay') {\n  selected = body.source_id ? all.filter(s => s.id === body.source_id) : all;\n}\n\n// Only what the scheduler would run anyway. A manual run cannot activate a\n// source the database refuses to activate.\nselected = selected.filter(s => s.active && s.config_status === 'verified' && s.parser_type !== 'unknown');\n\nconst runnable = [];\nconst skipped = [];\n\nfor (const s of selected) {\n  const locked = s.lock_expires_at && new Date(s.lock_expires_at).getTime() > now;\n  if (locked && !body.force) {\n    skipped.push({ json: { skipped: true, reason: 'already_running', source_id: s.id, authority_ar: s.authority_ar } });\n    continue;\n  }\n  runnable.push({ json: {\n    source: s,\n    trigger_type: 'manual',\n    dispatched_at: new Date().toISOString(),\n    correlation_id: body.correlation_id || null,\n    requested_by: body.requested_by || null,\n    single_url: scope === 'url' ? body.url : null,\n    dead_letter_id: scope === 'replay' ? body.dead_letter_id : null,\n    forced: !!body.force,\n  }});\n}\n\nconsole.log(JSON.stringify({\n  stage: 'manual_run', correlation_id: body.correlation_id,\n  scope, runnable: runnable.length, skipped: skipped.length,\n}));\n\nif (runnable.length === 0 && skipped.length === 0) {\n  // Nothing matched the requested scope at all: distinguish \"no such source\"\n  // from \"no active/verified sources for this scope\" so the webhook can\n  // return 404 vs 200 instead of silently answering with nothing, which\n  // previously left the webhook with no data to respond with.\n  const requestedButMissing =\n    (scope === 'source' || scope === 'url' || scope === 'replay') &&\n    body.source_id &&\n    !all.some((s) => s.id === body.source_id);\n\n  return [{ json: {\n    skipped: true,\n    not_found: requestedButMissing,\n    reason: requestedButMissing ? 'source_not_found' : 'no_matching_sources',\n    source_id: body.source_id || null,\n    scope,\n  } }];\n}\n\nreturn [...runnable, ...skipped];"
+          "jsCode": "// ── REQUEST VALIDATION ──────────────────────────────────────────────────────\n// Mirrors lib/ops/dispatch.ts validateManualRunBody, the tested specification.\n// Rejected here, before any source is touched, so the webhook answers 400\n// instead of doing nothing or failing three nodes later. The webhook is\n// reachable directly by anyone holding N8N_TRIGGER_SECRET, not only through\n// the Next.js form, so it cannot trust that a caller already validated.\n\nconst body = $('Manual run webhook').first().json.body || {};\nconst SCOPES = ['source', 'country', 'all', 'url', 'replay', 'drain'];\n\nconst scope = body.scope;\nlet invalidReason = null;\nif (typeof scope !== 'string' || !SCOPES.includes(scope)) invalidReason = 'invalid_scope';\nelse if (scope === 'source' && !body.source_id) invalidReason = 'missing_source_id';\nelse if (scope === 'country' && !body.country) invalidReason = 'missing_country';\nelse if (scope === 'url' && !body.url) invalidReason = 'missing_url';\nelse if (scope === 'replay' && !body.dead_letter_id) invalidReason = 'missing_dead_letter_id';\n\nif (invalidReason) {\n  return [{ json: { __valid: false, reason: invalidReason, correlation_id: body.correlation_id || null } }];\n}\n\n// correlation_id is always supplied by the Next.js caller (lib/ops/actions.ts);\n// the fallback only covers a direct webhook call made without one.\nconst correlationId = body.correlation_id\n  || ('m-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10));\n\nreturn [{ json: {\n  __valid: true,\n  scope,\n  source_id: body.source_id || null,\n  country: body.country || null,\n  url: body.url || null,\n  dead_letter_id: body.dead_letter_id || null,\n  force: !!body.force,\n  correlation_id: correlationId,\n  requested_by: body.requested_by || null,\n  requested_at: body.requested_at || new Date().toISOString(),\n}}];"
         },
-        "id": "0d0b415c-645b-42a5-baba-2f5b8cb1ac69",
-        "name": "Resolve manual run",
+        "id": "2f360e87-467d-40f9-ac11-a355b0f11b63",
+        "name": "Validate request",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
+          -912,
+          1632
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "version": 2
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.__valid }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "abf2dfbb-21af-4802-a707-0c9bd7859c49",
+        "name": "Request valid?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
           -688,
           1632
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// A malformed manual-run request — rejected before any source is touched.\nconst v = $input.first().json;\nreturn [{ json: {\n  ok: false,\n  status: 'invalid_request',\n  correlation_id: v.correlation_id || null,\n  reason: v.reason,\n  accepted_at: new Date().toISOString(),\n}}];"
+        },
+        "id": "718912ac-2e80-43f5-a135-3f5f3e5a5c55",
+        "name": "Build bad request response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -464,
+          1760
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}",
+          "options": {
+            "responseCode": 400
+          }
+        },
+        "id": "a5071159-6049-4a14-9b6d-1523f3ca3a15",
+        "name": "Respond: bad request",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          -240,
+          1760
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "tableId": "manual_run_dispatches",
+          "returnAll": true,
+          "filters": {
+            "conditions": [
+              {
+                "keyName": "correlation_id",
+                "condition": "eq",
+                "keyValue": "={{ $('Validate request').first().json.correlation_id }}"
+              }
+            ]
+          }
+        },
+        "id": "a4fddf56-5cd9-4074-bc44-2230927a0b24",
+        "name": "Check existing dispatch",
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          -464,
+          1632
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "10zDIxzQYFnJuOmh",
+            "name": "Supabase account 2"
+          }
+        },
+        "alwaysOutputData": true
+      },
+      {
+        "parameters": {
+          "jsCode": "// Idempotent replay: a correlation_id already accepted answers with the\n// ORIGINAL outcome instead of resolving the scope (and dispatching) again.\n//\n// \"Check existing dispatch\" runs with alwaysOutputData, so a genuine\n// zero-row result still arrives as one placeholder item with no\n// correlation_id — filtered out here rather than trusted by item count.\nconst rows = $input.all().map(i => i.json).filter(r => r && r.correlation_id);\nif (rows.length === 0) return [{ json: { __replay: false } }];\nconst r = rows[0];\nreturn [{ json: {\n  __replay: true,\n  correlation_id: r.correlation_id,\n  source_id: r.source_id,\n  accepted_at: r.accepted_at,\n  accepted_sources: r.accepted_sources || [],\n  skipped_sources: r.skipped_sources || [],\n}}];"
+        },
+        "id": "881d1d66-5d51-43c2-9bc7-2ee7d29a2d24",
+        "name": "Has existing dispatch?",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -240,
+          1632
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "version": 2
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.__replay }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "708a0b50-6571-447d-8770-ad23c6a508ff",
+        "name": "Already dispatched?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          -16,
+          1632
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Reshapes the stored dispatch row into the same contract a fresh accept\n// would return — same correlation_id, same accepted_at, same sources. This is\n// what makes correlation_id an idempotency key, not just a tracing label.\nconst r = $input.first().json;\nreturn [{ json: {\n  ok: true,\n  status: 'accepted',\n  correlation_id: r.correlation_id,\n  source_id: r.source_id,\n  accepted_at: r.accepted_at,\n  accepted_sources: r.accepted_sources,\n  skipped_sources: r.skipped_sources,\n}}];"
+        },
+        "id": "26c6ac6f-de43-4b72-90ea-af7170ed4d0f",
+        "name": "Build replay response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          208,
+          1520
         ]
       },
       {
@@ -1299,13 +1809,13 @@
           "tableId": "sources",
           "returnAll": true
         },
-        "id": "0874632b-25dd-4f3d-99c5-1d2ba7c7d34e",
+        "id": "2dfb3854-4422-4a4d-ae9f-7d4c860daabb",
         "name": "Sources for manual run",
         "type": "n8n-nodes-base.supabase",
         "typeVersion": 1,
         "position": [
-          -912,
-          1632
+          208,
+          1712
         ],
         "credentials": {
           "supabaseApi": {
@@ -1313,6 +1823,32 @@
             "name": "Supabase account 2"
           }
         }
+      },
+      {
+        "parameters": {
+          "jsCode": "// \"Record dispatch\" only writes the idempotency ledger; ITS output is the\n// inserted row, not the response. Restore the response actually built for\n// the caller, unaffected by whatever the insert (or its onError passthrough\n// on a duplicate-key race) happened to return.\nreturn [{ json: $('Build manual run response').first().json }];"
+        },
+        "id": "17dff977-f88a-4298-842e-29e90e089e23",
+        "name": "Finalize accepted response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2224,
+          1616
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ── MANUAL RUN RESOLVER ────────────────────────────────────────────────────\n// Resolves the requested scope to a source set and decides which are runnable\n// now versus already locked. The resolved sources go into the SAME ingestion\n// workflow the scheduler uses — there is no simplified manual path: a second\n// pipeline would be a second set of rules to keep in step, and the one used\n// in an emergency is the one least likely to be right.\n\nconst req = $('Validate request').first().json;\nconst all = $input.all().map(i => i.json).filter(r => typeof r.base_url === 'string');\nconst scope = req.scope;\nconst now = Date.now();\n\nlet selected = [];\nif (scope === 'source') selected = all.filter(s => s.id === req.source_id);\nelse if (scope === 'country') selected = all.filter(s => s.country === req.country);\nelse if (scope === 'all' || scope === 'drain') selected = all;\nelse if (scope === 'url' || scope === 'replay') {\n  selected = req.source_id ? all.filter(s => s.id === req.source_id) : all;\n}\n\n// Only what the scheduler would run anyway. A manual run cannot activate a\n// source the database refuses to activate.\nselected = selected.filter(s => s.active && s.config_status === 'verified' && s.parser_type !== 'unknown');\n\nconst runnable = [];\nconst skipped = [];\n\nfor (const s of selected) {\n  const locked = s.lock_expires_at && new Date(s.lock_expires_at).getTime() > now;\n  if (locked && !req.force) {\n    skipped.push({ json: { skipped: true, reason: 'already_running', source_id: s.id, authority_ar: s.authority_ar } });\n    continue;\n  }\n  runnable.push({ json: {\n    source: s,\n    trigger_type: 'manual',\n    dispatched_at: new Date().toISOString(),\n    correlation_id: req.correlation_id,\n    requested_by: req.requested_by,\n    single_url: scope === 'url' ? req.url : null,\n    dead_letter_id: scope === 'replay' ? req.dead_letter_id : null,\n    forced: !!req.force,\n  }});\n}\n\nconsole.log(JSON.stringify({\n  stage: 'manual_run', correlation_id: req.correlation_id,\n  scope, runnable: runnable.length, skipped: skipped.length,\n}));\n\nif (runnable.length === 0 && skipped.length === 0) {\n  // Nothing matched the requested scope at all: distinguish \"no such source\"\n  // from \"no active/verified sources for this scope\" so the webhook can\n  // answer 404 vs 200 instead of silently answering with nothing.\n  const requestedButMissing =\n    (scope === 'source' || scope === 'url' || scope === 'replay') &&\n    req.source_id &&\n    !all.some((s) => s.id === req.source_id);\n\n  return [{ json: {\n    skipped: true,\n    not_found: requestedButMissing,\n    reason: requestedButMissing ? 'source_not_found' : 'no_matching_sources',\n    source_id: req.source_id || null,\n    scope,\n  } }];\n}\n\nreturn [...runnable, ...skipped];"
+        },
+        "id": "b2493249-ae6c-45fe-985f-64a3458104fd",
+        "name": "Resolve manual run",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          432,
+          1712
+        ]
       },
       {
         "parameters": {
@@ -1336,13 +1872,13 @@
           },
           "options": {}
         },
-        "id": "1bf5b284-ba32-4251-ba0f-d4bf47e037fb",
+        "id": "9bdc8ed2-f381-40e4-a250-356e3df83d12",
         "name": "Runnable?",
         "type": "n8n-nodes-base.if",
         "typeVersion": 2.2,
         "position": [
-          -464,
-          1664
+          656,
+          1712
         ]
       },
       {
@@ -1363,78 +1899,126 @@
             "convertFieldsToString": true
           },
           "options": {
-            "waitForSubWorkflow": true
+            "waitForSubWorkflow": false
           },
           "mode": "each"
         },
-        "id": "b4478643-42bb-46ae-b14f-60ac98a2d75f",
+        "id": "b921546b-ccb0-46ce-b82b-32fc4c05fd78",
         "name": "Manual ingestion",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.2,
         "position": [
-          -240,
-          1568
+          880,
+          1632
         ],
-        "alwaysOutputData": true
+        "onError": "continueRegularOutput"
       },
       {
         "parameters": {
-          "jsCode": "// Manual run outcome, returned to the caller and logged.\nconst results = $input.all().map(i => i.json);\nconst processed = results.length;\nconst published = results.reduce((a, r) => a + (r.items_published || 0), 0);\nconst rejected = results.reduce((a, r) => a + (r.items_rejected || 0), 0);\nconst failed = results.filter(r => r.status === 'failed').length;\nconst duplicates = results.reduce((a, r) => a + ((r.rejection_reasons || {}).duplicate || 0), 0);\nconst correlationId = $('Manual run webhook').first().json.body?.correlation_id || null;\n\nreturn [{ json: {\n  ok: true,\n  status: processed === 0 ? 'empty' : 'completed',\n  execution_id: String($execution.id),\n  correlation_id: correlationId,\n  processed,\n  published,\n  rejected,\n  duplicates,\n  failed,\n  finished_at: new Date().toISOString(),\n}}];\n"
+          "mode": "append",
+          "options": {}
         },
-        "id": "5d0afd03-f338-4446-885c-171f82697343",
-        "name": "Manual run result",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
+        "id": "816e961f-f2a7-4240-be62-df8c556e0a30",
+        "name": "Merge for response",
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3,
         "position": [
-          16,
+          1104,
           1712
         ]
       },
       {
         "parameters": {
-          "jsCode": "// A source already running, or a scope that matched nothing, is reported as\n// a deliberate outcome rather than an error.\nconst correlationId = $('Manual run webhook').first().json.body?.correlation_id || null;\nconst items = $input.all().map(i => i.json);\nconst first = items[0] || {};\n\nreturn [{ json: {\n  ok: !first.not_found,\n  status: first.not_found ? 'rejected' : 'skipped',\n  execution_id: String($execution.id),\n  correlation_id: correlationId,\n  processed: 0,\n  published: 0,\n  rejected: 0,\n  duplicates: 0,\n  failed: 0,\n  reason: first.reason || 'already_running',\n  details: items.map((e) => ({ source_id: e.source_id, reason: e.reason, authority_ar: e.authority_ar })),\n  finished_at: new Date().toISOString(),\n}}];\n"
+          "jsCode": "// ── MANUAL RUN RESPONSE ─────────────────────────────────────────────────────\n// Aggregates the resolved sources (dispatched and skipped) into the single\n// response contract returned to the caller. Mirrors lib/ops/dispatch.ts —\n// resolveManualRun / foldDispatchFailures — the tested specification.\n\nconst req = $('Validate request').first().json;\nconst items = $input.all().map(i => i.json);\nconst now = new Date().toISOString();\n\n// A request whose scope matched nothing, or named a source that does not\n// exist, arrives as ONE marker item.\nif (items.length === 1 && items[0].skipped && (items[0].reason === 'no_matching_sources' || items[0].not_found)) {\n  const marker = items[0];\n  if (marker.not_found) {\n    return [{ json: {\n      ok: false, status: 'rejected', correlation_id: req.correlation_id,\n      source_id: marker.source_id || null, accepted_at: now, reason: 'source_not_found',\n    }}];\n  }\n  return [{ json: {\n    ok: true, status: 'skipped', correlation_id: req.correlation_id,\n    source_id: req.source_id, accepted_at: now, reason: 'no_matching_sources',\n  }}];\n}\n\nconst accepted = [];\nconst skipped = [];\n\nfor (const e of items) {\n  if (e.skipped) {\n    skipped.push({ source_id: e.source_id, reason: e.reason || 'already_running' });\n    continue;\n  }\n  // n8n leaves .error on an item that failed to even start when the dispatch\n  // node's onError is continueRegularOutput — reported, not silently lost.\n  if (e.error) {\n    skipped.push({ source_id: (e.source && e.source.id) || null, reason: 'dispatch_failed' });\n    continue;\n  }\n  accepted.push(e.source.id);\n}\n\n// Only when EVERY accepted candidate failed to start does the response\n// become a genuine dispatch failure (500). One bad source id in a\n// country/all batch must not turn a mostly-successful run into a 500.\nif (accepted.length === 0 && skipped.length > 0 && skipped.every(s => s.reason === 'dispatch_failed')) {\n  return [{ json: {\n    ok: false, status: 'failed', correlation_id: req.correlation_id,\n    source_id: req.source_id, accepted_at: now, reason: 'dispatch_failed', skipped_sources: skipped,\n  }}];\n}\n\nif (accepted.length === 0) {\n  return [{ json: {\n    ok: true, status: 'skipped', correlation_id: req.correlation_id,\n    source_id: req.source_id, accepted_at: now, reason: 'already_running', skipped_sources: skipped,\n  }}];\n}\n\nreturn [{ json: {\n  ok: true,\n  status: 'accepted',\n  correlation_id: req.correlation_id,\n  source_id: req.scope === 'source' ? (req.source_id || accepted[0]) : (accepted.length === 1 ? accepted[0] : null),\n  accepted_at: now,\n  accepted_sources: accepted,\n  skipped_sources: skipped,\n  scope: req.scope,\n}}];"
         },
-        "id": "b2621fc6-37cf-41d7-9bba-bc1e32e910db",
-        "name": "Already running",
+        "id": "f176f026-ebe8-48ee-8d60-50ccbb9a50a6",
+        "name": "Build manual run response",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          -240,
-          1728
+          1328,
+          1712
         ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "version": 2
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.status }}",
+                "rightValue": "accepted",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "8e992426-0464-49fc-81dd-5f02754c1d47",
+        "name": "Should persist dispatch?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1552,
+          1712
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Shapes the accepted outcome into exactly the manual_run_dispatches\n// columns — the idempotency ledger a retried correlation_id is answered from.\nconst r = $input.first().json;\nconst req = $('Validate request').first().json;\nreturn [{ json: {\n  correlation_id: r.correlation_id,\n  source_id: r.source_id,\n  scope: r.scope,\n  accepted_sources: r.accepted_sources || [],\n  skipped_sources: r.skipped_sources || [],\n  accepted_at: r.accepted_at,\n  requested_by: req.requested_by,\n}}];"
+        },
+        "id": "d7b4acc9-29bd-485a-b4e5-3750c42deb92",
+        "name": "Prepare dispatch record",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1776,
+          1616
+        ]
+      },
+      {
+        "parameters": {
+          "tableId": "manual_run_dispatches",
+          "dataToSend": "autoMapInputData"
+        },
+        "id": "d4254e43-865b-4341-921a-a0bb3783b41f",
+        "name": "Record dispatch",
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          2000,
+          1616
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "10zDIxzQYFnJuOmh",
+            "name": "Supabase account 2"
+          }
+        },
+        "onError": "continueRegularOutput"
       },
       {
         "parameters": {
           "respondWith": "json",
           "responseBody": "={{ $json }}",
           "options": {
-            "responseCode": "={{ $json.ok ? 200 : 500 }}"
+            "responseCode": "={{ $json.status === 'failed' ? 500 : ($json.status === 'rejected' ? 404 : ($json.status === 'accepted' ? 202 : ($json.reason === 'already_running' ? 409 : 200))) }}"
           }
         },
-        "id": "d54e2d03-26a3-4c52-b526-99303d755a21",
-        "name": "Respond: run result",
+        "id": "7cd927d2-0090-4f8b-acb2-12d180cde773",
+        "name": "Respond: manual run",
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.1,
         "position": [
-          3600,
-          700
-        ]
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={{ $json }}",
-          "options": {
-            "responseCode": "={{ $json.status === 'rejected' ? 404 : 200 }}"
-          }
-        },
-        "id": "9d947e2a-9360-44a6-87e0-4b894e5c2a7f",
-        "name": "Respond: skipped",
-        "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 1.1,
-        "position": [
-          3600,
-          900
+          2448,
+          1712
         ]
       }
     ],
@@ -1610,7 +2194,98 @@
         "main": [
           [
             {
+              "node": "Validate request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate request": {
+        "main": [
+          [
+            {
+              "node": "Request valid?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Request valid?": {
+        "main": [
+          [
+            {
+              "node": "Check existing dispatch",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build bad request response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build bad request response": {
+        "main": [
+          [
+            {
+              "node": "Respond: bad request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check existing dispatch": {
+        "main": [
+          [
+            {
+              "node": "Has existing dispatch?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has existing dispatch?": {
+        "main": [
+          [
+            {
+              "node": "Already dispatched?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Already dispatched?": {
+        "main": [
+          [
+            {
+              "node": "Build replay response",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
               "node": "Sources for manual run",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build replay response": {
+        "main": [
+          [
+            {
+              "node": "Respond: manual run",
               "type": "main",
               "index": 0
             }
@@ -1650,9 +2325,9 @@
           ],
           [
             {
-              "node": "Already running",
+              "node": "Merge for response",
               "type": "main",
-              "index": 0
+              "index": 1
             }
           ]
         ]
@@ -1661,29 +2336,80 @@
         "main": [
           [
             {
-              "node": "Manual run result",
+              "node": "Merge for response",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Manual run result": {
+      "Merge for response": {
         "main": [
           [
             {
-              "node": "Respond: run result",
+              "node": "Build manual run response",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Already running": {
+      "Build manual run response": {
         "main": [
           [
             {
-              "node": "Respond: skipped",
+              "node": "Should persist dispatch?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Should persist dispatch?": {
+        "main": [
+          [
+            {
+              "node": "Prepare dispatch record",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond: manual run",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare dispatch record": {
+        "main": [
+          [
+            {
+              "node": "Record dispatch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Record dispatch": {
+        "main": [
+          [
+            {
+              "node": "Finalize accepted response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Finalize accepted response": {
+        "main": [
+          [
+            {
+              "node": "Respond: manual run",
               "type": "main",
               "index": 0
             }
@@ -1697,10 +2423,10 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-08-02T07:38:46.165Z",
-        "id": 412,
+        "createdAt": "2026-08-02T12:56:31.283Z",
+        "id": 426,
         "workflowId": "HWSwJIZfuZVsErD8",
-        "versionId": "ce88f27f-c8f2-409a-bf86-68ef935a6fa8",
+        "versionId": "751eb85e-2126-42ce-bc62-d1707c5cc110",
         "event": "activated",
         "userId": "c6441430-2935-43cb-a7bd-db0da8ae18ce"
       }

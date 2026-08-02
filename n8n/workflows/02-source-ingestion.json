@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-02T07:44:15.625Z",
+  "updatedAt": "2026-08-02T12:25:02.734Z",
   "createdAt": "2026-08-01T16:46:39.922Z",
   "id": "FHt8uKbBcixIWbWO",
   "name": "02 — Source Ingestion",
@@ -521,7 +521,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Aggregates every outcome for this source into ONE workflow_logs row.\n//\n// One row per source per run, not one per item: workflow_logs records\n// executions, and the dashboard aggregates from it. Rejections are counted in\n// rejection_reasons rather than logged individually — a rejection is a normal\n// decision, not an incident.\n\nconst src = $('Called by scheduler').first().json.source;\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\n\nlet fetched = 0, published = 0, rejected = 0;\nconst reasons = {};\nlet errorMessage = null;\n\nfor (const entry of $input.all()) {\n  const e = entry.json;\n  fetched += 1;\n\n  if (e.__rejected) {\n    rejected += 1;\n    reasons[e.reason] = (reasons[e.reason] || 0) + 1;\n    continue;\n  }\n  if (e.outcome === 'published') { published += 1; continue; }\n  if (e.outcome === 'duplicate') { rejected += 1; reasons.duplicate = (reasons.duplicate || 0) + 1; continue; }\n  if (e.outcome === 'rejected') {\n    rejected += 1;\n    reasons[e.reason || 'unknown'] = (reasons[e.reason || 'unknown'] || 0) + 1;\n    continue;\n  }\n  if (e.outcome === 'insert_failed') {\n    rejected += 1;\n    reasons.insert_failed = (reasons.insert_failed || 0) + 1;\n    errorMessage = e.error_message || errorMessage;\n  }\n}\n\nconst finished = new Date().toISOString();\n\n// partial: some items failed to insert. failed is reserved for a run that\n// could not fetch at all, which the M10 failure branch records.\nconst status = errorMessage ? 'partial' : 'success';\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: src.id,\n  trigger_type: trigger,\n  status,\n  items_fetched: fetched,\n  items_published: published,\n  items_rejected: rejected,\n  rejection_reasons: reasons,\n  error_message: errorMessage,\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];"
+        "jsCode": "// Aggregates every outcome for this source into ONE workflow_logs row.\n//\n// One row per source per run, not one per item: workflow_logs records\n// executions, and the dashboard aggregates from it. Rejections are counted in\n// rejection_reasons rather than logged individually — a rejection is a normal\n// decision, not an incident.\n\nconst src = $('Called by scheduler').first().json.source;\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\nconst correlationId = $('Called by scheduler').first().json.correlation_id || null;\n\nlet fetched = 0, published = 0, rejected = 0;\nconst reasons = {};\nlet errorMessage = null;\n\nfor (const entry of $input.all()) {\n  const e = entry.json;\n  fetched += 1;\n\n  if (e.__rejected) {\n    rejected += 1;\n    reasons[e.reason] = (reasons[e.reason] || 0) + 1;\n    continue;\n  }\n  if (e.outcome === 'published') { published += 1; continue; }\n  if (e.outcome === 'duplicate') { rejected += 1; reasons.duplicate = (reasons.duplicate || 0) + 1; continue; }\n  if (e.outcome === 'rejected') {\n    rejected += 1;\n    reasons[e.reason || 'unknown'] = (reasons[e.reason || 'unknown'] || 0) + 1;\n    continue;\n  }\n  if (e.outcome === 'insert_failed') {\n    rejected += 1;\n    reasons.insert_failed = (reasons.insert_failed || 0) + 1;\n    errorMessage = e.error_message || errorMessage;\n  }\n}\n\nconst finished = new Date().toISOString();\n\n// partial: some items failed to insert. failed is reserved for a run that\n// could not fetch at all, which the M10 failure branch records.\nconst status = errorMessage ? 'partial' : 'success';\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: src.id,\n  trigger_type: trigger,\n  correlation_id: correlationId,\n  status,\n  items_fetched: fetched,\n  items_published: published,\n  items_rejected: rejected,\n  rejection_reasons: reasons,\n  error_message: errorMessage,\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];"
       },
       "id": "93bf6454-c769-483b-96b7-6c96535ea99a",
       "name": "Summarise run",
@@ -584,7 +584,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Deliberate empty-run outcome: the source fetched cleanly but produced\n// nothing normalisable (or everything was filtered by domain/shape). This\n// is a successful run, logged as such, not silently dropped.\nconst src = $('Called by scheduler').first().json.source;\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\nconst marker = $input.first().json;\nconst finished = new Date().toISOString();\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: src.id,\n  trigger_type: trigger,\n  status: 'empty',\n  items_fetched: marker.raw_count || 0,\n  items_published: 0,\n  items_rejected: 0,\n  rejection_reasons: marker.rejected || {},\n  error_message: null,\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];\n"
+        "jsCode": "// Deliberate empty-run outcome: the source fetched cleanly but produced\n// nothing normalisable (or everything was filtered by domain/shape). This\n// is a successful run, logged as such, not silently dropped.\nconst src = $('Called by scheduler').first().json.source;\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\nconst correlationId = $('Called by scheduler').first().json.correlation_id || null;\nconst marker = $input.first().json;\nconst finished = new Date().toISOString();\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: src.id,\n  trigger_type: trigger,\n  correlation_id: correlationId,\n  status: 'empty',\n  items_fetched: marker.raw_count || 0,\n  items_published: 0,\n  items_rejected: 0,\n  rejection_reasons: marker.rejected || {},\n  error_message: null,\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];\n"
       },
       "id": "74754020-9bb6-4c14-a471-cd1de0ba61cf",
       "name": "Build empty run summary",
@@ -597,7 +597,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// A source that could not be fetched at all still needs a workflow_logs\n// row (status='failed') and must not leave the webhook response hanging.\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\nconst e = $input.first().json;\nconst finished = new Date().toISOString();\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: e.source_id,\n  trigger_type: trigger,\n  status: 'failed',\n  items_fetched: 0,\n  items_published: 0,\n  items_rejected: 0,\n  rejection_reasons: {},\n  error_message: e.error_message || 'fetch failed',\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];\n"
+        "jsCode": "// A source that could not be fetched at all still needs a workflow_logs\n// row (status='failed') and must not leave the webhook response hanging.\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\nconst correlationId = $('Called by scheduler').first().json.correlation_id || null;\nconst e = $input.first().json;\nconst finished = new Date().toISOString();\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: e.source_id,\n  trigger_type: trigger,\n  correlation_id: correlationId,\n  status: 'failed',\n  items_fetched: 0,\n  items_published: 0,\n  items_rejected: 0,\n  rejection_reasons: {},\n  error_message: e.error_message || 'fetch failed',\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];\n"
       },
       "id": "05905a1a-1ceb-4fe7-9a0f-c12dd89b980f",
       "name": "Build failed run summary",
@@ -1010,9 +1010,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "28a04c62-f0f1-4124-8635-887e7dcb9847",
-  "activeVersionId": "28a04c62-f0f1-4124-8635-887e7dcb9847",
-  "versionCounter": 30,
+  "versionId": "91b93426-c238-453d-9df3-034c466248ac",
+  "activeVersionId": "91b93426-c238-453d-9df3-034c466248ac",
+  "versionCounter": 33,
   "triggerCount": 0,
   "shared": [
     {
@@ -1081,9 +1081,9 @@
     }
   ],
   "activeVersion": {
-    "updatedAt": "2026-08-02T07:44:15.626Z",
-    "createdAt": "2026-08-02T07:44:15.626Z",
-    "versionId": "28a04c62-f0f1-4124-8635-887e7dcb9847",
+    "updatedAt": "2026-08-02T12:25:02.735Z",
+    "createdAt": "2026-08-02T12:25:02.735Z",
+    "versionId": "91b93426-c238-453d-9df3-034c466248ac",
     "workflowId": "FHt8uKbBcixIWbWO",
     "nodes": [
       {
@@ -1600,7 +1600,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// Aggregates every outcome for this source into ONE workflow_logs row.\n//\n// One row per source per run, not one per item: workflow_logs records\n// executions, and the dashboard aggregates from it. Rejections are counted in\n// rejection_reasons rather than logged individually — a rejection is a normal\n// decision, not an incident.\n\nconst src = $('Called by scheduler').first().json.source;\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\n\nlet fetched = 0, published = 0, rejected = 0;\nconst reasons = {};\nlet errorMessage = null;\n\nfor (const entry of $input.all()) {\n  const e = entry.json;\n  fetched += 1;\n\n  if (e.__rejected) {\n    rejected += 1;\n    reasons[e.reason] = (reasons[e.reason] || 0) + 1;\n    continue;\n  }\n  if (e.outcome === 'published') { published += 1; continue; }\n  if (e.outcome === 'duplicate') { rejected += 1; reasons.duplicate = (reasons.duplicate || 0) + 1; continue; }\n  if (e.outcome === 'rejected') {\n    rejected += 1;\n    reasons[e.reason || 'unknown'] = (reasons[e.reason || 'unknown'] || 0) + 1;\n    continue;\n  }\n  if (e.outcome === 'insert_failed') {\n    rejected += 1;\n    reasons.insert_failed = (reasons.insert_failed || 0) + 1;\n    errorMessage = e.error_message || errorMessage;\n  }\n}\n\nconst finished = new Date().toISOString();\n\n// partial: some items failed to insert. failed is reserved for a run that\n// could not fetch at all, which the M10 failure branch records.\nconst status = errorMessage ? 'partial' : 'success';\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: src.id,\n  trigger_type: trigger,\n  status,\n  items_fetched: fetched,\n  items_published: published,\n  items_rejected: rejected,\n  rejection_reasons: reasons,\n  error_message: errorMessage,\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];"
+          "jsCode": "// Aggregates every outcome for this source into ONE workflow_logs row.\n//\n// One row per source per run, not one per item: workflow_logs records\n// executions, and the dashboard aggregates from it. Rejections are counted in\n// rejection_reasons rather than logged individually — a rejection is a normal\n// decision, not an incident.\n\nconst src = $('Called by scheduler').first().json.source;\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\nconst correlationId = $('Called by scheduler').first().json.correlation_id || null;\n\nlet fetched = 0, published = 0, rejected = 0;\nconst reasons = {};\nlet errorMessage = null;\n\nfor (const entry of $input.all()) {\n  const e = entry.json;\n  fetched += 1;\n\n  if (e.__rejected) {\n    rejected += 1;\n    reasons[e.reason] = (reasons[e.reason] || 0) + 1;\n    continue;\n  }\n  if (e.outcome === 'published') { published += 1; continue; }\n  if (e.outcome === 'duplicate') { rejected += 1; reasons.duplicate = (reasons.duplicate || 0) + 1; continue; }\n  if (e.outcome === 'rejected') {\n    rejected += 1;\n    reasons[e.reason || 'unknown'] = (reasons[e.reason || 'unknown'] || 0) + 1;\n    continue;\n  }\n  if (e.outcome === 'insert_failed') {\n    rejected += 1;\n    reasons.insert_failed = (reasons.insert_failed || 0) + 1;\n    errorMessage = e.error_message || errorMessage;\n  }\n}\n\nconst finished = new Date().toISOString();\n\n// partial: some items failed to insert. failed is reserved for a run that\n// could not fetch at all, which the M10 failure branch records.\nconst status = errorMessage ? 'partial' : 'success';\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: src.id,\n  trigger_type: trigger,\n  correlation_id: correlationId,\n  status,\n  items_fetched: fetched,\n  items_published: published,\n  items_rejected: rejected,\n  rejection_reasons: reasons,\n  error_message: errorMessage,\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];"
         },
         "id": "93bf6454-c769-483b-96b7-6c96535ea99a",
         "name": "Summarise run",
@@ -1663,7 +1663,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// Deliberate empty-run outcome: the source fetched cleanly but produced\n// nothing normalisable (or everything was filtered by domain/shape). This\n// is a successful run, logged as such, not silently dropped.\nconst src = $('Called by scheduler').first().json.source;\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\nconst marker = $input.first().json;\nconst finished = new Date().toISOString();\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: src.id,\n  trigger_type: trigger,\n  status: 'empty',\n  items_fetched: marker.raw_count || 0,\n  items_published: 0,\n  items_rejected: 0,\n  rejection_reasons: marker.rejected || {},\n  error_message: null,\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];\n"
+          "jsCode": "// Deliberate empty-run outcome: the source fetched cleanly but produced\n// nothing normalisable (or everything was filtered by domain/shape). This\n// is a successful run, logged as such, not silently dropped.\nconst src = $('Called by scheduler').first().json.source;\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\nconst correlationId = $('Called by scheduler').first().json.correlation_id || null;\nconst marker = $input.first().json;\nconst finished = new Date().toISOString();\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: src.id,\n  trigger_type: trigger,\n  correlation_id: correlationId,\n  status: 'empty',\n  items_fetched: marker.raw_count || 0,\n  items_published: 0,\n  items_rejected: 0,\n  rejection_reasons: marker.rejected || {},\n  error_message: null,\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];\n"
         },
         "id": "74754020-9bb6-4c14-a471-cd1de0ba61cf",
         "name": "Build empty run summary",
@@ -1676,7 +1676,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// A source that could not be fetched at all still needs a workflow_logs\n// row (status='failed') and must not leave the webhook response hanging.\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\nconst e = $input.first().json;\nconst finished = new Date().toISOString();\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: e.source_id,\n  trigger_type: trigger,\n  status: 'failed',\n  items_fetched: 0,\n  items_published: 0,\n  items_rejected: 0,\n  rejection_reasons: {},\n  error_message: e.error_message || 'fetch failed',\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];\n"
+          "jsCode": "// A source that could not be fetched at all still needs a workflow_logs\n// row (status='failed') and must not leave the webhook response hanging.\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\nconst correlationId = $('Called by scheduler').first().json.correlation_id || null;\nconst e = $input.first().json;\nconst finished = new Date().toISOString();\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: e.source_id,\n  trigger_type: trigger,\n  correlation_id: correlationId,\n  status: 'failed',\n  items_fetched: 0,\n  items_published: 0,\n  items_rejected: 0,\n  rejection_reasons: {},\n  error_message: e.error_message || 'fetch failed',\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];\n"
         },
         "id": "05905a1a-1ceb-4fe7-9a0f-c12dd89b980f",
         "name": "Build failed run summary",
@@ -2084,10 +2084,10 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-08-02T07:44:15.714Z",
-        "id": 413,
+        "createdAt": "2026-08-02T12:25:02.814Z",
+        "id": 423,
         "workflowId": "FHt8uKbBcixIWbWO",
-        "versionId": "28a04c62-f0f1-4124-8635-887e7dcb9847",
+        "versionId": "91b93426-c238-453d-9df3-034c466248ac",
         "event": "activated",
         "userId": "c6441430-2935-43cb-a7bd-db0da8ae18ce"
       }
