@@ -3,13 +3,13 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "b2000000-0000-4000-8000-000000000001",
+      "id": "9858366b-8ef5-4bd8-b4a4-107e49c5436f",
       "name": "Called by scheduler",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
       "position": [
-        -800,
-        400
+        -480,
+        304
       ]
     },
     {
@@ -33,8 +33,7 @@
                   }
                 ],
                 "combinator": "and"
-              },
-              "outputKey": "rss"
+              }
             },
             {
               "conditions": {
@@ -53,8 +52,7 @@
                   }
                 ],
                 "combinator": "and"
-              },
-              "outputKey": "api"
+              }
             },
             {
               "conditions": {
@@ -73,8 +71,7 @@
                   }
                 ],
                 "combinator": "and"
-              },
-              "outputKey": "html"
+              }
             },
             {
               "conditions": {
@@ -93,8 +90,7 @@
                   }
                 ],
                 "combinator": "and"
-              },
-              "outputKey": "pdf"
+              }
             }
           ]
         },
@@ -102,35 +98,34 @@
           "fallbackOutput": "none"
         }
       },
-      "id": "b2000000-0000-4000-8000-000000000002",
+      "id": "53c083b9-d01b-41f7-a19a-9d0664cd5359",
       "name": "Parser router",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        -580,
-        400
+        -256,
+        304
       ]
     },
     {
       "parameters": {
         "url": "={{ $json.source.feed_url }}",
         "options": {
-          "timeout": 30000,
           "response": {
             "response": {
-              "neverError": false,
               "responseFormat": "text"
             }
-          }
+          },
+          "timeout": 30000
         }
       },
-      "id": "b2000000-0000-4000-8000-000000000010",
+      "id": "79792d0e-bcaf-4ab9-9147-08f3ef970407",
       "name": "Fetch RSS",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -320,
-        100
+        0,
+        0
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -141,26 +136,26 @@
       "parameters": {
         "options": {}
       },
-      "id": "b2000000-0000-4000-8000-000000000011",
+      "id": "421b3d1c-9b4b-4f2e-8de4-863036d46c30",
       "name": "Parse XML",
       "type": "n8n-nodes-base.xml",
       "typeVersion": 1,
       "position": [
-        -100,
-        100
+        224,
+        0
       ]
     },
     {
       "parameters": {
         "jsCode": "// RSS lane → RawItem[]\n//\n// parser_config may name which fields carry the date and body; both default\n// to the RSS conventions. Nothing here is guessed at crawl time — an\n// unconfigured source never reaches this workflow, because it cannot be\n// activated.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst dateField = cfg.date_field || 'pubDate';\nconst contentField = cfg.content_field || 'description';\n\nconst root = $input.first().json;\nconst channel = root?.rss?.channel ?? root?.feed ?? {};\nlet entries = channel.item ?? channel.entry ?? root?.feed?.entry ?? [];\nif (!Array.isArray(entries)) entries = [entries];\n\nconst text = (v) => {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  if (typeof v === 'object') return v._ ?? v['#text'] ?? '';\n  return String(v);\n};\n\nconst toIsoDate = (v) => {\n  const raw = text(v);\n  if (!raw) return null;\n  const d = new Date(raw);\n  // An unparseable date becomes null. The AI is instructed never to invent\n  // one, and neither does this.\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nconst linkOf = (e) => {\n  if (typeof e.link === 'string') return e.link;\n  if (Array.isArray(e.link)) return e.link[0]?.$?.href ?? text(e.link[0]);\n  return e.link?.$?.href ?? text(e.link) ?? e.guid ? text(e.guid) : '';\n};\n\nreturn entries.filter(Boolean).map((e) => ({\n  json: {\n    source_id: src.id,\n    source_url: linkOf(e),\n    title_raw: text(e.title),\n    content_raw: text(e[contentField]) || text(e.summary) || text(e.content),\n    publication_date: toIsoDate(e[dateField] ?? e.published ?? e.updated),\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
       },
-      "id": "b2000000-0000-4000-8000-000000000012",
+      "id": "40ab11fd-8caa-4050-a276-25af3ffbdbf9",
       "name": "RSS → RawItem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        120,
-        100
+        448,
+        0
       ]
     },
     {
@@ -173,13 +168,13 @@
           "timeout": 30000
         }
       },
-      "id": "b2000000-0000-4000-8000-000000000020",
+      "id": "3d0cd50a-feef-41f2-a744-20d39b4cb093",
       "name": "Fetch API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -320,
-        300
+        0,
+        208
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -190,34 +185,34 @@
       "parameters": {
         "jsCode": "// API lane → RawItem[]\n// Field paths come from parser_config, filled in by an admin who inspected\n// the real response. Nothing is inferred.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\n\nconst dig = (obj, path) =>\n  (path || '').split('.').filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);\n\nconst payload = $input.first().json;\nlet items = cfg.items_path ? dig(payload, cfg.items_path) : payload;\nif (!Array.isArray(items)) items = items ? [items] : [];\n\nconst toIsoDate = (raw) => {\n  if (!raw) return null;\n  const d = new Date(raw);\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nreturn items.map((it) => ({\n  json: {\n    source_id: src.id,\n    source_url: String(dig(it, cfg.url) ?? ''),\n    title_raw: String(dig(it, cfg.title) ?? ''),\n    content_raw: String(dig(it, cfg.body) ?? ''),\n    publication_date: toIsoDate(dig(it, cfg.date)),\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
       },
-      "id": "b2000000-0000-4000-8000-000000000021",
+      "id": "cc84dd24-e6a7-4725-b99d-4d75a19900ed",
       "name": "API → RawItem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -100,
-        300
+        224,
+        208
       ]
     },
     {
       "parameters": {
         "url": "={{ $json.source.base_url }}",
         "options": {
-          "timeout": 30000,
           "response": {
             "response": {
               "responseFormat": "text"
             }
-          }
+          },
+          "timeout": 30000
         }
       },
-      "id": "b2000000-0000-4000-8000-000000000030",
+      "id": "537b9077-bd28-4f2c-8978-ba5ada3f26ba",
       "name": "Fetch HTML",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -320,
-        500
+        0,
+        400
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -232,54 +227,54 @@
             {
               "key": "items",
               "cssSelector": "={{ $('Called by scheduler').first().json.source.parser_config.list }}",
-              "returnArray": true,
-              "returnValue": "html"
+              "returnValue": "html",
+              "returnArray": true
             }
           ]
         },
         "options": {}
       },
-      "id": "b2000000-0000-4000-8000-000000000031",
+      "id": "be3851f6-129e-4606-9181-99e54393d774",
       "name": "Extract listing",
       "type": "n8n-nodes-base.html",
       "typeVersion": 1.2,
       "position": [
-        -100,
-        500
+        224,
+        400
       ]
     },
     {
       "parameters": {
         "jsCode": "// HTML lane → RawItem[]\n//\n// Selectors come from parser_config, which an admin filled in against the\n// live page during verification. A source with an empty config cannot be\n// marked verified and therefore cannot be active, so this never runs on\n// guessed selectors.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst base = new URL(src.base_url);\n\nconst blocks = $input.first().json.items || [];\n\n// Minimal extraction over the fragment HTML. Kept dependency-free: the\n// HTML node has already narrowed the document to the list items.\nconst pick = (html, selector) => {\n  if (!selector) return '';\n  const attrMatch = selector.match(/^(.*)@([\\w-]+)$/);\n  const sel = (attrMatch ? attrMatch[1] : selector).trim();\n  const attr = attrMatch ? attrMatch[2] : null;\n  const tag = sel.split(/[\\s>]/).pop().replace(/[.#].*$/, '') || 'a';\n  const re = new RegExp(`<${tag}[^>]*>([\\\\s\\\\S]*?)</${tag}>`, 'i');\n  if (attr) {\n    const attrRe = new RegExp(`<${tag}[^>]*\\\\s${attr}=[\"']([^\"']+)[\"']`, 'i');\n    const m = html.match(attrRe);\n    return m ? m[1] : '';\n  }\n  const m = html.match(re);\n  return m ? m[1].replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim() : '';\n};\n\nconst absolute = (href) => {\n  if (!href) return '';\n  try { return new URL(href, base).toString(); } catch { return ''; }\n};\n\nconst toIsoDate = (raw) => {\n  if (!raw) return null;\n  const d = new Date(raw);\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nreturn blocks.map((html) => {\n  const link = absolute(pick(html, cfg.link));\n  const pdfMatch = html.match(/href=[\"']([^\"']+\\.pdf)[\"']/i);\n  return {\n    json: {\n      source_id: src.id,\n      source_url: link,\n      title_raw: pick(html, cfg.title),\n      content_raw: pick(html, cfg.body),\n      publication_date: toIsoDate(pick(html, cfg.date)),\n      // PDF enrichment applies to every lane, not just parser_type = pdf:\n      // gazettes routinely publish a listing entry whose substance is an\n      // attached document.\n      attachments: pdfMatch ? [absolute(pdfMatch[1])] : [],\n      fetched_at: new Date().toISOString(),\n    },\n  };\n});"
       },
-      "id": "b2000000-0000-4000-8000-000000000032",
+      "id": "66a54f22-2502-497c-94b1-ff5c01c7a351",
       "name": "HTML → RawItem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        120,
-        500
+        448,
+        400
       ]
     },
     {
       "parameters": {
         "url": "={{ $json.source.base_url }}",
         "options": {
-          "timeout": 30000,
           "response": {
             "response": {
               "responseFormat": "text"
             }
-          }
+          },
+          "timeout": 30000
         }
       },
-      "id": "b2000000-0000-4000-8000-000000000040",
+      "id": "e6cbeaaa-36b2-4d32-b352-ee4ce1adab5f",
       "name": "Fetch PDF index",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -320,
-        700
+        0,
+        608
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -288,86 +283,75 @@
     },
     {
       "parameters": {
-        "jsCode": "// PDF-index lane → RawItem[]\n//\n// The page is a list of PDF links, typical of official gazettes. Each link\n// becomes a RawItem carrying the document as an attachment; the download and\n// text extraction happen in the enrichment step so every lane shares one\n// implementation.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst base = new URL(src.base_url);\nconst maxPages = Number(cfg.max_pages) || 40;\n\nconst html = typeof $input.first().json.data === 'string'\n  ? $input.first().json.data\n  : ($input.first().json.body ?? '');\n\nconst links = [...html.matchAll(/href=[\"']([^\"']+\\.pdf)[\"'][^>]*>([\\s\\S]*?)</gi)]\n  .slice(0, maxPages)\n  .map((m) => ({\n    href: (() => { try { return new URL(m[1], base).toString(); } catch { return ''; } })(),\n    label: m[2].replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim(),\n  }))\n  .filter((l) => l.href);\n\nreturn links.map((l) => ({\n  json: {\n    source_id: src.id,\n    source_url: l.href,\n    title_raw: l.label,\n    content_raw: '',\n    // The gazette listing rarely states a publication date; leave it null and\n    // let the AI read it from the document rather than inventing one here.\n    publication_date: null,\n    attachments: [l.href],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
+        "jsCode": "const src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst maxPages = Number(cfg.max_pages) || 40;\n\nconst baseUrl = String(src.base_url || '').replace(/\\/+$/, '');\nconst originMatch = baseUrl.match(/^(https?:\\/\\/[^/]+)/i);\nconst origin = originMatch ? originMatch[1] : baseUrl;\n\nconst makeAbsolute = (href) => {\n  const value = String(href || '').trim();\n\n  if (!value) return '';\n  if (/^https?:\\/\\//i.test(value)) return value;\n  if (value.startsWith('//')) return `https:${value}`;\n  if (value.startsWith('/')) return `${origin}${value}`;\n\n  return `${baseUrl}/${value.replace(/^\\/+/, '')}`;\n};\n\nconst input = $input.first().json;\n\nconst html =\n  typeof input.data === 'string'\n    ? input.data\n    : typeof input.body === 'string'\n      ? input.body\n      : '';\n\nconst links = [...html.matchAll(\n  /href=[\"']([^\"']+\\.pdf(?:\\?[^\"']*)?)[\"'][^>]*>([\\s\\S]*?)</gi\n)]\n  .slice(0, maxPages)\n  .map((match) => ({\n    href: makeAbsolute(match[1]),\n    label: match[2]\n      .replace(/<[^>]+>/g, ' ')\n      .replace(/\\s+/g, ' ')\n      .trim(),\n  }))\n  .filter((link) => link.href);\n\nreturn links.map((link) => ({\n  json: {\n    source_id: src.id,\n    source_url: link.href,\n    title_raw: link.label || 'عدد من الجريدة الرسمية أم القرى',\n    content_raw: '',\n    publication_date: null,\n    attachments: [link.href],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
       },
-      "id": "b2000000-0000-4000-8000-000000000041",
+      "id": "7c4ba6b3-537b-4aff-8c0a-c728f7b1e896",
       "name": "PDF index → RawItem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -100,
-        700
+        224,
+        608
       ]
     },
     {
       "parameters": {
         "numberInputs": 4
       },
-      "id": "b2000000-0000-4000-8000-000000000050",
+      "id": "436ee566-779a-4d1e-89f6-90da3c920321",
       "name": "Merge lanes",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
       "position": [
-        360,
-        400
+        688,
+        304
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Normalises and validates every RawItem before anything downstream sees it.\n//\n// This is the single contract between parsing and the M9 AI stage: whatever\n// lane produced an item, it leaves here in the same shape or not at all.\n\nconst src = $('Called by scheduler').first().json.source;\nconst allowed = (src.allowed_domains || []).map((d) => String(d).toLowerCase());\n\nconst out = [];\nconst rejected = { no_url: 0, no_title: 0, domain_mismatch: 0 };\n\nfor (const item of $input.all()) {\n  const r = item.json;\n\n  if (!r.source_url) { rejected.no_url += 1; continue; }\n  if (!r.title_raw || !String(r.title_raw).trim()) { rejected.no_title += 1; continue; }\n\n  // Domain check happens here as well as in the Publishing Gate (M9). An item\n  // whose URL is off the source's allow-list is not worth spending an AI call\n  // on, and it must never be attributed to this authority.\n  let host;\n  try { host = new URL(r.source_url).hostname.toLowerCase(); } catch { rejected.no_url += 1; continue; }\n  if (!allowed.includes(host)) { rejected.domain_mismatch += 1; continue; }\n\n  out.push({\n    json: {\n      source_id: src.id,\n      source_url: r.source_url,\n      title_raw: String(r.title_raw).trim().slice(0, 2000),\n      content_raw: String(r.content_raw || '').trim().slice(0, 50000),\n      publication_date: r.publication_date || null,\n      attachments: Array.isArray(r.attachments) ? r.attachments.slice(0, 5) : [],\n      fetched_at: r.fetched_at || new Date().toISOString(),\n      // carried through so M9 can log against the right source\n      source: {\n        id: src.id,\n        country: src.country,\n        authority_ar: src.authority_ar,\n        allowed_domains: src.allowed_domains,\n      },\n    },\n  });\n}\n\nconsole.log(`normalised ${out.length} items; rejected ${JSON.stringify(rejected)}`);\n\n// M9 attaches the AI stage and the Publishing Gate to this output.\nreturn out;"
+        "jsCode": "// Normalises and validates every RawItem before anything downstream sees it.\n//\n// This is the single contract between parsing and the M9 AI stage: whatever\n// lane produced an item, it leaves here in the same shape or not at all.\n\nconst src = $('Called by scheduler').first().json.source;\n\nconst allowed = (src.allowed_domains || [])\n  .map((domain) => String(domain).trim().toLowerCase())\n  .filter(Boolean);\n\nconst out = [];\nconst rejected = {\n  no_url: 0,\n  no_title: 0,\n  domain_mismatch: 0,\n};\n\nfor (const item of $input.all()) {\n  const r = item.json;\n\n  const sourceUrl = String(r.source_url || '').trim();\n  const titleRaw = String(r.title_raw || '').trim();\n\n  if (!sourceUrl) {\n    rejected.no_url += 1;\n    continue;\n  }\n\n  if (!titleRaw) {\n    rejected.no_title += 1;\n    continue;\n  }\n\n  // Extract hostname without using the URL class,\n  // because this n8n environment does not expose it inside Code nodes.\n  const hostMatch = sourceUrl.match(/^https?:\\/\\/([^/:?#]+)/i);\n\n  if (!hostMatch) {\n    rejected.no_url += 1;\n    continue;\n  }\n\n  const host = hostMatch[1].toLowerCase();\n\n  if (!allowed.includes(host)) {\n    rejected.domain_mismatch += 1;\n    continue;\n  }\n\n  out.push({\n    json: {\n      source_id: src.id,\n      source_url: sourceUrl,\n      title_raw: titleRaw.slice(0, 2000),\n      content_raw: String(r.content_raw || '').trim().slice(0, 50000),\n      publication_date: r.publication_date || null,\n      attachments: Array.isArray(r.attachments)\n        ? r.attachments.slice(0, 5)\n        : [],\n      fetched_at: r.fetched_at || new Date().toISOString(),\n\n      // Carried through so M9 can log against the correct source.\n      source: {\n        id: src.id,\n        country: src.country,\n        authority_ar: src.authority_ar,\n        allowed_domains: src.allowed_domains,\n      },\n    },\n  });\n}\n\nconsole.log(\n  `normalised ${out.length} items; rejected ${JSON.stringify(rejected)}`\n);\n\n// M9 attaches the AI stage and the Publishing Gate to this output.\nreturn out;"
       },
-      "id": "b2000000-0000-4000-8000-000000000051",
+      "id": "871b4a68-729a-4d68-9886-b6e57016a7e3",
       "name": "Normalise RawItem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        580,
-        400
+        912,
+        304
       ]
     },
     {
       "parameters": {
         "jsCode": "// Fetch failure for this source.\n//\n// Isolated on purpose: one unreachable source must not stop the others in the\n// same scheduler tick. M10 turns this into retry state and a health snapshot;\n// for now it records the failure and ends this source's run.\n\nconst src = $('Called by scheduler').first().json.source;\nconst err = $input.first().json.error || $input.first().json;\n\nreturn [{\n  json: {\n    failed: true,\n    source_id: src.id,\n    authority_ar: src.authority_ar,\n    error_message: String(err?.message || err?.reason || 'fetch failed').slice(0, 1000),\n  },\n}];"
       },
-      "id": "b2000000-0000-4000-8000-000000000060",
+      "id": "785ba1b9-0edb-476e-bb8f-988f21151f97",
       "name": "Record fetch failure",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        120,
-        900
+        448,
+        800
       ]
     },
     {
       "parameters": {
-        "tableId": "app_settings",
-        "returnAll": true,
-        "filters": {
-          "conditions": [
-            {
-              "keyName": "key",
-              "condition": "eq",
-              "keyValue": "ai.confidence_threshold"
-            }
-          ]
-        },
-        "options": {}
+        "tableId": "app_settings"
       },
-      "id": "b2000000-0000-4000-8000-000000000070",
+      "id": "db447710-99b0-46f5-ad12-04dcaadf2010",
       "name": "Get threshold",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
       "position": [
-        580,
-        620
+        912,
+        528
       ],
+      "alwaysOutputData": true,
       "credentials": {
         "supabaseApi": {
-          "id": "SUPABASE_SERVICE_ROLE",
-          "name": "Supabase (service_role)"
+          "id": "10zDIxzQYFnJuOmh",
+          "name": "Supabase account 2"
         }
-      },
-      "alwaysOutputData": true
+      }
     },
     {
       "parameters": {
@@ -385,24 +369,24 @@
           "timeout": 60000
         }
       },
-      "id": "b2000000-0000-4000-8000-000000000071",
+      "id": "cd12041f-9490-447d-94b2-30c6ae7009fa",
       "name": "Classify with AI",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        800,
-        400
+        1120,
+        304
       ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 2000,
-      "onError": "continueRegularOutput",
       "credentials": {
         "httpHeaderAuth": {
-          "id": "ANTHROPIC_API_KEY",
-          "name": "Anthropic API"
+          "id": "jtSVrGAaoOTVzEWT",
+          "name": "Header Auth account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -419,144 +403,147 @@
         "includeOtherFields": true,
         "options": {}
       },
-      "id": "b2000000-0000-4000-8000-000000000072",
+      "id": "b413aaa7-4dc4-46fe-bbe0-d139adb1af3c",
       "name": "Classification prompt",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        700,
-        260
+        1024,
+        160
       ]
     },
     {
       "parameters": {
         "jsCode": "// Carries the RawItem alongside the AI response so the validator can pair\n// them. n8n keeps item order through the HTTP node, but pairing explicitly is\n// cheaper than relying on that.\nconst items = $('Normalise RawItem').all().map(i => i.json);\nreturn $input.all().map((entry, i) => ({ json: { ...entry.json, __item: items[i] } }));"
       },
-      "id": "b2000000-0000-4000-8000-000000000073",
+      "id": "7dbdba25-3c1c-4145-a98d-a87dc926b6a8",
       "name": "Pair with RawItem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1000,
-        400
+        1328,
+        304
       ]
     },
     {
       "parameters": {
         "jsCode": "// Parses and validates the model's JSON. FAIL CLOSED.\n//\n// Anything malformed, incomplete, or outside the allowed enums is rejected\n// outright — never coerced, never defaulted. A coerced category would put a\n// confident wrong classification in a legal archive, which is worse than a gap.\n\nconst COUNTRY = ['SA','AE','KW','QA','BH','OM','GCC'];\nconst CATEGORY = ['tax','customs','employment','corporate','financial','capital_markets','banking','data_privacy','cybersecurity','competition','intellectual_property','litigation','licensing','real_estate','energy','healthcare','trade','general'];\nconst DOC_TYPE = ['law','royal_decree','ministerial_decision','executive_regulation','circular','regulatory_framework','official_notice','court_precedent','consultation_draft','other'];\nconst STATUS = ['enacted','effective','draft','amended','repealed','pending'];\n\nconst ISO_DATE = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst isDate = (v) => {\n  if (v === null || v === undefined || v === '') return true;\n  if (typeof v !== 'string' || !ISO_DATE.test(v)) return false;\n  const d = new Date(v + 'T00:00:00Z');\n  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0,10) === v;\n};\nconst strList = (v) => Array.isArray(v) && v.every(x => typeof x === 'string');\nconst nonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const item = entry.json.__item;\n  const response = entry.json;\n\n  const fail = (reason, detail) => out.push({ json: {\n    __item: item, __rejected: true, reason, detail: detail ? String(detail).slice(0,300) : null,\n  }});\n\n  // The Messages API returns content blocks; the text block carries the JSON.\n  const text = response?.content?.[0]?.text;\n  if (!nonEmpty(text)) { fail('ai_empty_response'); continue; }\n\n  let ai;\n  try {\n    ai = JSON.parse(text.trim());\n  } catch {\n    // One tolerated shape: the model wrapped the object in prose or a fence.\n    const m = text.match(/\\{[\\s\\S]*\\}/);\n    if (!m) { fail('ai_parse_failure', text); continue; }\n    try { ai = JSON.parse(m[0]); } catch { fail('ai_parse_failure', text); continue; }\n  }\n\n  if (!ai || typeof ai !== 'object' || Array.isArray(ai)) { fail('ai_not_an_object'); continue; }\n\n  if (!nonEmpty(ai.title_ar)) { fail('ai_invalid_output', 'title_ar'); continue; }\n  if (!nonEmpty(ai.summary_ar)) { fail('ai_invalid_output', 'summary_ar'); continue; }\n  if (!COUNTRY.includes(ai.country)) { fail('ai_invalid_output', 'country=' + ai.country); continue; }\n  if (!CATEGORY.includes(ai.category)) { fail('ai_invalid_output', 'category=' + ai.category); continue; }\n  if (!DOC_TYPE.includes(ai.document_type)) { fail('ai_invalid_output', 'document_type=' + ai.document_type); continue; }\n  if (!STATUS.includes(ai.legal_status)) { fail('ai_invalid_output', 'legal_status=' + ai.legal_status); continue; }\n  if (typeof ai.is_legal_update !== 'boolean') { fail('ai_invalid_output', 'is_legal_update'); continue; }\n  if (typeof ai.confidence !== 'number' || !Number.isFinite(ai.confidence) || ai.confidence < 0 || ai.confidence > 1) {\n    fail('ai_invalid_output', 'confidence=' + ai.confidence); continue;\n  }\n  if (!isDate(ai.effective_date)) { fail('ai_invalid_output', 'effective_date=' + ai.effective_date); continue; }\n  if (!isDate(ai.publication_date)) { fail('ai_invalid_output', 'publication_date=' + ai.publication_date); continue; }\n  if (ai.affected_entities !== undefined && !strList(ai.affected_entities)) { fail('ai_invalid_output', 'affected_entities'); continue; }\n  if (ai.keywords !== undefined && !strList(ai.keywords)) { fail('ai_invalid_output', 'keywords'); continue; }\n\n  out.push({ json: {\n    __item: item,\n    __rejected: false,\n    ai: {\n      title_ar: ai.title_ar.trim(),\n      summary_ar: ai.summary_ar.trim(),\n      country: ai.country,\n      category: ai.category,\n      document_type: ai.document_type,\n      legal_status: ai.legal_status,\n      is_legal_update: ai.is_legal_update,\n      confidence: ai.confidence,\n      publication_date: ai.publication_date || null,\n      effective_date: ai.effective_date || null,\n      affected_entities: (ai.affected_entities || []).slice(0, 20),\n      keywords: (ai.keywords || []).slice(0, 20),\n    },\n  }});\n}\n\nreturn out;"
       },
-      "id": "b2000000-0000-4000-8000-000000000074",
+      "id": "081721b7-6539-42f3-a272-71bf53516dc5",
       "name": "Validate AI output",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1200,
-        400
+        1520,
+        304
       ]
     },
     {
       "parameters": {
         "jsCode": "// Builds the string that becomes content_hash, and drops items the AI stage\n// already rejected.\n//\n// Hash inputs: source_id | source_url | title | publication_date. The URL is\n// included deliberately — two authorities republishing the same instrument at\n// different URLs are two archive entries, and the M3 exclusion-group rule\n// handles the mirror case instead.\n\nconst out = [];\nfor (const entry of $input.all()) {\n  const e = entry.json;\n  if (e.__rejected) { out.push({ json: e }); continue; }\n\n  const item = e.__item;\n  const pubDate = item.publication_date || e.ai.publication_date || '';\n\n  out.push({ json: {\n    ...e,\n    hash_input: [item.source_id, item.source_url, e.ai.title_ar, pubDate].join('|'),\n  }});\n}\nreturn out;"
       },
-      "id": "b2000000-0000-4000-8000-000000000075",
+      "id": "5a4585a1-fddb-40a4-a367-c0e4cfa3b01d",
       "name": "Build hash input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1400,
-        400
+        1728,
+        304
       ]
     },
     {
       "parameters": {
-        "action": "hash",
         "type": "SHA256",
         "value": "={{ $json.hash_input || 'skipped' }}",
-        "dataPropertyName": "content_hash",
-        "encoding": "hex"
+        "dataPropertyName": "content_hash"
       },
-      "id": "b2000000-0000-4000-8000-000000000076",
+      "id": "0cfdb2cb-f293-4288-bba3-6fb6a2501b11",
       "name": "SHA256 content hash",
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 1,
       "position": [
-        1600,
-        400
+        1920,
+        304
       ]
     },
     {
       "parameters": {
         "jsCode": "// Prepares the Publishing Gate payload and reads the fail-closed threshold.\n//\n// ai.confidence_threshold is deliberately NOT defaulted here. If it is missing\n// or malformed the gate rejects everything — defaulting it could quietly widen\n// what publishes, so absence must be loud.\n\nconst settings = $('Get threshold').all().map(i => i.json);\nconst row = settings.find(r => r.key === 'ai.confidence_threshold');\nconst threshold = row && typeof row.value === 'number' ? row.value : null;\n\nconst out = [];\nfor (const entry of $input.all()) {\n  const e = entry.json;\n  if (e.__rejected) { out.push({ json: e }); continue; }\n\n  const item = e.__item;\n  out.push({ json: {\n    __rejected: false,\n    confidence_threshold: threshold,\n    ai: e.ai,\n    item: {\n      source_id: item.source_id,\n      source_url: item.source_url,\n      content_hash: e.content_hash,\n      publication_date: item.publication_date,\n      // Verbatim source text, stored so a lawyer can check the summary against\n      // what the authority actually published.\n      raw_excerpt: (item.content_raw || item.title_raw || '').slice(0, 20000),\n      // The official document URL, preserved end to end.\n      document_path: (item.attachments && item.attachments[0]) || null,\n      ai_model: 'claude-sonnet-5',\n    },\n  }});\n}\nreturn out;"
       },
-      "id": "b2000000-0000-4000-8000-000000000077",
+      "id": "66a59970-b03f-4d7e-8c52-a3367cd7aaf4",
       "name": "Prepare gate payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1800,
-        400
+        2128,
+        304
       ]
     },
     {
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "03-publishing-gate",
+          "value": "2AmFW6QzgNwSxaOU",
           "mode": "list",
+          "cachedResultUrl": "/workflow/2AmFW6QzgNwSxaOU",
           "cachedResultName": "03 — Publishing Gate"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
-          "value": {}
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
         },
         "options": {
           "waitForSubWorkflow": true
         }
       },
-      "id": "b2000000-0000-4000-8000-000000000078",
+      "id": "249c86c5-e456-4706-a3b2-31c36ffae3ce",
       "name": "Publishing Gate",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        2000,
-        400
+        2320,
+        304
       ]
     },
     {
       "parameters": {
         "jsCode": "// Aggregates every outcome for this source into ONE workflow_logs row.\n//\n// One row per source per run, not one per item: workflow_logs records\n// executions, and the dashboard aggregates from it. Rejections are counted in\n// rejection_reasons rather than logged individually — a rejection is a normal\n// decision, not an incident.\n\nconst src = $('Called by scheduler').first().json.source;\nconst started = $('Called by scheduler').first().json.dispatched_at || new Date().toISOString();\nconst trigger = $('Called by scheduler').first().json.trigger_type || 'scheduled';\n\nlet fetched = 0, published = 0, rejected = 0;\nconst reasons = {};\nlet errorMessage = null;\n\nfor (const entry of $input.all()) {\n  const e = entry.json;\n  fetched += 1;\n\n  if (e.__rejected) {\n    rejected += 1;\n    reasons[e.reason] = (reasons[e.reason] || 0) + 1;\n    continue;\n  }\n  if (e.outcome === 'published') { published += 1; continue; }\n  if (e.outcome === 'duplicate') { rejected += 1; reasons.duplicate = (reasons.duplicate || 0) + 1; continue; }\n  if (e.outcome === 'rejected') {\n    rejected += 1;\n    reasons[e.reason || 'unknown'] = (reasons[e.reason || 'unknown'] || 0) + 1;\n    continue;\n  }\n  if (e.outcome === 'insert_failed') {\n    rejected += 1;\n    reasons.insert_failed = (reasons.insert_failed || 0) + 1;\n    errorMessage = e.error_message || errorMessage;\n  }\n}\n\nconst finished = new Date().toISOString();\n\n// partial: some items failed to insert. failed is reserved for a run that\n// could not fetch at all, which the M10 failure branch records.\nconst status = errorMessage ? 'partial' : 'success';\n\nreturn [{ json: {\n  workflow_name: '02-source-ingestion',\n  execution_id: String($execution.id),\n  source_id: src.id,\n  trigger_type: trigger,\n  status,\n  items_fetched: fetched,\n  items_published: published,\n  items_rejected: rejected,\n  rejection_reasons: reasons,\n  error_message: errorMessage,\n  duration_ms: Math.max(0, new Date(finished).getTime() - new Date(started).getTime()),\n  retry_attempt: 0,\n  started_at: started,\n  finished_at: finished,\n}}];"
       },
-      "id": "b2000000-0000-4000-8000-000000000079",
+      "id": "93bf6454-c769-483b-96b7-6c96535ea99a",
       "name": "Summarise run",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2200,
-        400
+        2528,
+        304
       ]
     },
     {
       "parameters": {
         "tableId": "workflow_logs",
-        "dataToSend": "autoMapInputData",
-        "options": {}
+        "dataToSend": "autoMapInputData"
       },
-      "id": "b2000000-0000-4000-8000-000000000080",
+      "id": "170a7b3f-ac3f-48af-8f31-93784e1be5bd",
       "name": "Write workflow log",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
       "position": [
-        2400,
-        400
+        2720,
+        304
       ],
       "credentials": {
         "supabaseApi": {
-          "id": "SUPABASE_SERVICE_ROLE",
-          "name": "Supabase (service_role)"
+          "id": "10zDIxzQYFnJuOmh",
+          "name": "Supabase account 2"
         }
       }
     }
   ],
+  "pinData": {},
   "connections": {
     "Called by scheduler": {
       "main": [
@@ -866,13 +853,23 @@
       ]
     }
   },
+  "active": true,
   "settings": {
     "executionOrder": "v1",
-    "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all"
+    "binaryMode": "separate",
+    "availableInMCP": false
   },
+  "versionId": "fbca7a00-9432-47a3-b136-1443e0760e33",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d7f986a139d895345e7303bf6ab13d892ee341ebd969ff058bb594fa66e37fb3"
+  },
+  "id": "FHt8uKbBcixIWbWO",
   "tags": [
     {
+      "updatedAt": "2026-08-01T15:13:31.517Z",
+      "createdAt": "2026-08-01T15:13:31.517Z",
+      "id": "CFx6g4HIqhyJJh7g",
       "name": "legal-intelligence"
     }
   ]
