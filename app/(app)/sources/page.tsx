@@ -7,6 +7,14 @@ import { COUNTRIES } from '@/lib/constants/countries'
 import { SOURCE_STATUS_META, deriveSourceStatus } from '@/lib/sources/status'
 import { formatDateAr } from '@/lib/utils'
 
+const PARSER_TYPE_LABELS_AR: Record<string, string> = {
+  rss: 'RSS',
+  api: 'API',
+  html: 'HTML',
+  pdf: 'فهرس PDF',
+  unknown: 'غير محدَّد',
+}
+
 export const metadata = { title: 'المصادر' }
 
 export default async function SourcesPage({
@@ -103,8 +111,13 @@ export default async function SourcesPage({
                   {s.base_url}
                 </p>
                 <p className="mt-1 text-xs text-(--color-ink-subtle)">
-                  أولوية {s.priority} · آخر تحديث {formatDateAr(s.updated_at)}
+                  أولوية {s.priority} · {PARSER_TYPE_LABELS_AR[s.parser_type] ?? s.parser_type} · آخر تحديث{' '}
+                  {formatDateAr(s.updated_at)}
+                  {s.last_success_at ? <> · آخر نجاح {formatDateAr(s.last_success_at)}</> : null}
                 </p>
+                {s.last_failure_reason && !s.active ? (
+                  <p className="mt-1 text-xs text-(--color-danger)">{s.last_failure_reason}</p>
+                ) : null}
               </Link>
             </li>
           )

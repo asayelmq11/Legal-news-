@@ -101,6 +101,43 @@ describe('n8n workflow exports', () => {
   })
 
   /* ---------------------------------------------------------------------- */
+  /* Source provisioning (2026-08-03) — real defects found while dry-run     */
+  /* testing candidate sources against production n8n egress.                */
+  /* ---------------------------------------------------------------------- */
+
+  it('every fetch lane accepts a per-source TLS bypass, never on by default', () => {
+    // Several government certificates are valid (verified independently
+    // against a trusted CA store — DigiCert/Sectigo/Amazon, all unexpired,
+    // correctly issued) but fail n8n's own stale CA bundle. The bypass is
+    // opt-in per source via parser_config, never a blanket default.
+    const wf = loadFull('02-source-ingestion.json')
+    for (const name of ['Fetch RSS', 'Fetch API', 'Fetch HTML', 'Fetch PDF index']) {
+      const n = wf.nodes.find((x) => x.name === name)
+      const options = n?.parameters.options as { allowUnauthorizedCerts?: unknown } | undefined
+      expect(options?.allowUnauthorizedCerts, `${name} must read the opt-in flag`).toBe(
+        '={{ !!$json.source.parser_config.allow_insecure_tls }}',
+      )
+    }
+  })
+
+  it('the RSS text extractor descends into a nested element instead of returning empty', () => {
+    // A real feed (HRSD) wraps <title> in an <a> element instead of plain
+    // text/CDATA: <title><a href="...">real text</a></title>. The naive
+    // v._ ?? v['#text'] lookup returns '' for this shape, which silently
+    // rejected every single item in the feed as having no title. Confirmed
+    // empirically via a dry run before this fix (0/50 items titled) and
+    // after (title recovered).
+    const wf = loadFull('02-source-ingestion.json')
+    const n = wf.nodes.find((x) => x.name === 'RSS → RawItem')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain("if (v._ !== undefined) return v._;")
+    expect(code).toContain("for (const key of Object.keys(v))")
+    // must still short-circuit on the common shapes first — no regression
+    // in the fast path for well-formed feeds
+    expect(code.indexOf("if (v._ !== undefined)")).toBeLessThan(code.indexOf('for (const key of Object.keys(v))'))
+  })
+
+  /* ---------------------------------------------------------------------- */
   /* M9 — AI classification and the Publishing Gate                          */
   /* ---------------------------------------------------------------------- */
 

@@ -74,6 +74,15 @@ lanes:
 | `html` | `base_url` → HTML extract | `list`, `title`, `link`, `date`, `body` |
 | `pdf` | `base_url` → PDF link index | `list`, `max_pages` |
 
+Every lane also reads `allow_insecure_tls` (boolean, default false) — an opt-in
+per source, not a default. Some legitimate government certificates fail
+n8n's own CA bundle (stale/incomplete) even though they are valid, unexpired
+and correctly chained when checked against a real trusted store (confirmed
+independently for several sources during the 2026-08-03 provisioning pass —
+see `docs/source-provisioning-2026-08-02.md`). Set this only after
+independently verifying the certificate, never to silence an unverified
+warning.
+
 All four converge on one normaliser producing the shared `RawItem`:
 
 ```jsonc

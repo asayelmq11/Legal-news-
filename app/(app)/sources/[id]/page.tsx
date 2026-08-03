@@ -92,6 +92,13 @@ export default async function SourceDetailPage({
         <SourceControls source={source} />
       </section>
 
+      {source.notes ? (
+        <section className="rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-5">
+          <h2 className="mb-2 text-sm font-semibold text-(--color-ink)">ملاحظات</h2>
+          <p className="whitespace-pre-wrap text-sm text-(--color-ink-muted)">{source.notes}</p>
+        </section>
+      ) : null}
+
       <section className="rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-5">
         <h2 className="mb-4 text-sm font-semibold text-(--color-ink)">صحة المصدر</h2>
         <dl className="grid gap-2 text-sm sm:grid-cols-2">

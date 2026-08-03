@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-02T12:25:02.734Z",
+  "updatedAt": "2026-08-03T08:13:23.416Z",
   "createdAt": "2026-08-01T16:46:39.922Z",
   "id": "FHt8uKbBcixIWbWO",
   "name": "02 — Source Ingestion",
@@ -122,7 +122,8 @@
               "responseFormat": "text"
             }
           },
-          "timeout": 30000
+          "timeout": 30000,
+          "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
         }
       },
       "id": "79792d0e-bcaf-4ab9-9147-08f3ef970407",
@@ -153,7 +154,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// RSS lane → RawItem[]\n//\n// parser_config may name which fields carry the date and body; both default\n// to the RSS conventions. Nothing here is guessed at crawl time — an\n// unconfigured source never reaches this workflow, because it cannot be\n// activated.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst dateField = cfg.date_field || 'pubDate';\nconst contentField = cfg.content_field || 'description';\n\nconst root = $input.first().json;\nconst channel = root?.rss?.channel ?? root?.feed ?? {};\nlet entries = channel.item ?? channel.entry ?? root?.feed?.entry ?? [];\nif (!Array.isArray(entries)) entries = [entries];\n\nconst text = (v) => {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  if (typeof v === 'object') return v._ ?? v['#text'] ?? '';\n  return String(v);\n};\n\nconst toIsoDate = (v) => {\n  const raw = text(v);\n  if (!raw) return null;\n  const d = new Date(raw);\n  // An unparseable date becomes null. The AI is instructed never to invent\n  // one, and neither does this.\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nconst linkOf = (e) => {\n  if (typeof e.link === 'string') return e.link;\n  if (Array.isArray(e.link)) return e.link[0]?.$?.href ?? text(e.link[0]);\n  return e.link?.$?.href ?? text(e.link) ?? e.guid ? text(e.guid) : '';\n};\n\nreturn entries.filter(Boolean).map((e) => ({\n  json: {\n    source_id: src.id,\n    source_url: linkOf(e),\n    title_raw: text(e.title),\n    content_raw: text(e[contentField]) || text(e.summary) || text(e.content),\n    publication_date: toIsoDate(e[dateField] ?? e.published ?? e.updated),\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
+        "jsCode": "// RSS lane → RawItem[]\n//\n// parser_config may name which fields carry the date and body; both default\n// to the RSS conventions. Nothing here is guessed at crawl time — an\n// unconfigured source never reaches this workflow, because it cannot be\n// activated.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst dateField = cfg.date_field || 'pubDate';\nconst contentField = cfg.content_field || 'description';\n\nconst root = $input.first().json;\nconst channel = root?.rss?.channel ?? root?.feed ?? {};\nlet entries = channel.item ?? channel.entry ?? root?.feed?.entry ?? [];\nif (!Array.isArray(entries)) entries = [entries];\n\nconst text = (v) => {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  if (typeof v === 'object') {\n    if (v._ !== undefined) return v._;\n    if (v['#text'] !== undefined) return v['#text'];\n    // Some feeds wrap the value in a nested element (e.g. <title><a>text</a></title>)\n    // instead of plain text or CDATA. Descend into the first nested value with content.\n    for (const key of Object.keys(v)) {\n      if (key === '$') continue;\n      const nested = text(v[key]);\n      if (nested) return nested;\n    }\n    return '';\n  }\n  return String(v);\n};\n\nconst toIsoDate = (v) => {\n  const raw = text(v);\n  if (!raw) return null;\n  const d = new Date(raw);\n  // An unparseable date becomes null. The AI is instructed never to invent\n  // one, and neither does this.\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nconst linkOf = (e) => {\n  if (typeof e.link === 'string') return e.link;\n  if (Array.isArray(e.link)) return e.link[0]?.$?.href ?? text(e.link[0]);\n  return e.link?.$?.href ?? text(e.link) ?? e.guid ? text(e.guid) : '';\n};\n\nreturn entries.filter(Boolean).map((e) => ({\n  json: {\n    source_id: src.id,\n    source_url: linkOf(e),\n    title_raw: text(e.title),\n    content_raw: text(e[contentField]) || text(e.summary) || text(e.content),\n    publication_date: toIsoDate(e[dateField] ?? e.published ?? e.updated),\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
       },
       "id": "40ab11fd-8caa-4050-a276-25af3ffbdbf9",
       "name": "RSS → RawItem",
@@ -171,7 +172,8 @@
         "specifyHeaders": "json",
         "jsonHeaders": "={{ JSON.stringify($json.source.parser_config.headers || {}) }}",
         "options": {
-          "timeout": 30000
+          "timeout": 30000,
+          "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
         }
       },
       "id": "3d0cd50a-feef-41f2-a744-20d39b4cb093",
@@ -209,7 +211,8 @@
               "responseFormat": "text"
             }
           },
-          "timeout": 30000
+          "timeout": 30000,
+          "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
         }
       },
       "id": "537b9077-bd28-4f2c-8978-ba5ada3f26ba",
@@ -271,7 +274,8 @@
               "responseFormat": "text"
             }
           },
-          "timeout": 30000
+          "timeout": 30000,
+          "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
         }
       },
       "id": "e6cbeaaa-36b2-4d32-b352-ee4ce1adab5f",
@@ -1010,9 +1014,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "91b93426-c238-453d-9df3-034c466248ac",
-  "activeVersionId": "91b93426-c238-453d-9df3-034c466248ac",
-  "versionCounter": 33,
+  "versionId": "65160952-5543-4a14-bdd3-cd6de7db288f",
+  "activeVersionId": "65160952-5543-4a14-bdd3-cd6de7db288f",
+  "versionCounter": 42,
   "triggerCount": 0,
   "shared": [
     {
@@ -1037,7 +1041,7 @@
             "userId": "c6441430-2935-43cb-a7bd-db0da8ae18ce",
             "projectId": "Fo19xH6yJI9Yypvs",
             "user": {
-              "updatedAt": "2026-08-02T05:54:54.138Z",
+              "updatedAt": "2026-08-02T21:18:02.485Z",
               "createdAt": "2026-06-03T19:16:50.624Z",
               "id": "c6441430-2935-43cb-a7bd-db0da8ae18ce",
               "email": "asayelmq@gmail.com",
@@ -1064,7 +1068,7 @@
               },
               "disabled": false,
               "mfaEnabled": false,
-              "lastActiveAt": "2026-08-01",
+              "lastActiveAt": "2026-08-02",
               "isPending": false
             }
           }
@@ -1081,9 +1085,9 @@
     }
   ],
   "activeVersion": {
-    "updatedAt": "2026-08-02T12:25:02.735Z",
-    "createdAt": "2026-08-02T12:25:02.735Z",
-    "versionId": "91b93426-c238-453d-9df3-034c466248ac",
+    "updatedAt": "2026-08-03T08:13:23.418Z",
+    "createdAt": "2026-08-03T08:13:23.418Z",
+    "versionId": "65160952-5543-4a14-bdd3-cd6de7db288f",
     "workflowId": "FHt8uKbBcixIWbWO",
     "nodes": [
       {
@@ -1201,7 +1205,8 @@
                 "responseFormat": "text"
               }
             },
-            "timeout": 30000
+            "timeout": 30000,
+            "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
           }
         },
         "id": "79792d0e-bcaf-4ab9-9147-08f3ef970407",
@@ -1232,7 +1237,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// RSS lane → RawItem[]\n//\n// parser_config may name which fields carry the date and body; both default\n// to the RSS conventions. Nothing here is guessed at crawl time — an\n// unconfigured source never reaches this workflow, because it cannot be\n// activated.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst dateField = cfg.date_field || 'pubDate';\nconst contentField = cfg.content_field || 'description';\n\nconst root = $input.first().json;\nconst channel = root?.rss?.channel ?? root?.feed ?? {};\nlet entries = channel.item ?? channel.entry ?? root?.feed?.entry ?? [];\nif (!Array.isArray(entries)) entries = [entries];\n\nconst text = (v) => {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  if (typeof v === 'object') return v._ ?? v['#text'] ?? '';\n  return String(v);\n};\n\nconst toIsoDate = (v) => {\n  const raw = text(v);\n  if (!raw) return null;\n  const d = new Date(raw);\n  // An unparseable date becomes null. The AI is instructed never to invent\n  // one, and neither does this.\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nconst linkOf = (e) => {\n  if (typeof e.link === 'string') return e.link;\n  if (Array.isArray(e.link)) return e.link[0]?.$?.href ?? text(e.link[0]);\n  return e.link?.$?.href ?? text(e.link) ?? e.guid ? text(e.guid) : '';\n};\n\nreturn entries.filter(Boolean).map((e) => ({\n  json: {\n    source_id: src.id,\n    source_url: linkOf(e),\n    title_raw: text(e.title),\n    content_raw: text(e[contentField]) || text(e.summary) || text(e.content),\n    publication_date: toIsoDate(e[dateField] ?? e.published ?? e.updated),\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
+          "jsCode": "// RSS lane → RawItem[]\n//\n// parser_config may name which fields carry the date and body; both default\n// to the RSS conventions. Nothing here is guessed at crawl time — an\n// unconfigured source never reaches this workflow, because it cannot be\n// activated.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst dateField = cfg.date_field || 'pubDate';\nconst contentField = cfg.content_field || 'description';\n\nconst root = $input.first().json;\nconst channel = root?.rss?.channel ?? root?.feed ?? {};\nlet entries = channel.item ?? channel.entry ?? root?.feed?.entry ?? [];\nif (!Array.isArray(entries)) entries = [entries];\n\nconst text = (v) => {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  if (typeof v === 'object') {\n    if (v._ !== undefined) return v._;\n    if (v['#text'] !== undefined) return v['#text'];\n    // Some feeds wrap the value in a nested element (e.g. <title><a>text</a></title>)\n    // instead of plain text or CDATA. Descend into the first nested value with content.\n    for (const key of Object.keys(v)) {\n      if (key === '$') continue;\n      const nested = text(v[key]);\n      if (nested) return nested;\n    }\n    return '';\n  }\n  return String(v);\n};\n\nconst toIsoDate = (v) => {\n  const raw = text(v);\n  if (!raw) return null;\n  const d = new Date(raw);\n  // An unparseable date becomes null. The AI is instructed never to invent\n  // one, and neither does this.\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nconst linkOf = (e) => {\n  if (typeof e.link === 'string') return e.link;\n  if (Array.isArray(e.link)) return e.link[0]?.$?.href ?? text(e.link[0]);\n  return e.link?.$?.href ?? text(e.link) ?? e.guid ? text(e.guid) : '';\n};\n\nreturn entries.filter(Boolean).map((e) => ({\n  json: {\n    source_id: src.id,\n    source_url: linkOf(e),\n    title_raw: text(e.title),\n    content_raw: text(e[contentField]) || text(e.summary) || text(e.content),\n    publication_date: toIsoDate(e[dateField] ?? e.published ?? e.updated),\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
         },
         "id": "40ab11fd-8caa-4050-a276-25af3ffbdbf9",
         "name": "RSS → RawItem",
@@ -1250,7 +1255,8 @@
           "specifyHeaders": "json",
           "jsonHeaders": "={{ JSON.stringify($json.source.parser_config.headers || {}) }}",
           "options": {
-            "timeout": 30000
+            "timeout": 30000,
+            "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
           }
         },
         "id": "3d0cd50a-feef-41f2-a744-20d39b4cb093",
@@ -1288,7 +1294,8 @@
                 "responseFormat": "text"
               }
             },
-            "timeout": 30000
+            "timeout": 30000,
+            "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
           }
         },
         "id": "537b9077-bd28-4f2c-8978-ba5ada3f26ba",
@@ -1350,7 +1357,8 @@
                 "responseFormat": "text"
               }
             },
-            "timeout": 30000
+            "timeout": 30000,
+            "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
           }
         },
         "id": "e6cbeaaa-36b2-4d32-b352-ee4ce1adab5f",
@@ -2084,10 +2092,10 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-08-02T12:25:02.814Z",
-        "id": 423,
+        "createdAt": "2026-08-03T08:13:23.501Z",
+        "id": 439,
         "workflowId": "FHt8uKbBcixIWbWO",
-        "versionId": "91b93426-c238-453d-9df3-034c466248ac",
+        "versionId": "65160952-5543-4a14-bdd3-cd6de7db288f",
         "event": "activated",
         "userId": "c6441430-2935-43cb-a7bd-db0da8ae18ce"
       }
