@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-03T08:13:23.416Z",
+  "updatedAt": "2026-08-03T11:19:16.344Z",
   "createdAt": "2026-08-01T16:46:39.922Z",
   "id": "FHt8uKbBcixIWbWO",
   "name": "02 — Source Ingestion",
@@ -319,7 +319,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Normalises and validates every RawItem before anything downstream sees it.\n//\n// This is the single contract between parsing and the M9 AI stage: whatever\n// lane produced an item, it leaves here in the same shape or not at all.\n\nconst src = $('Called by scheduler').first().json.source;\n\nconst allowed = (src.allowed_domains || [])\n  .map((domain) => String(domain).trim().toLowerCase())\n  .filter(Boolean);\n\nconst out = [];\nconst rejected = {\n  no_url: 0,\n  no_title: 0,\n  domain_mismatch: 0,\n};\n\nfor (const item of $input.all()) {\n  const r = item.json;\n\n  const sourceUrl = String(r.source_url || '').trim();\n  const titleRaw = String(r.title_raw || '').trim();\n\n  if (!sourceUrl) {\n    rejected.no_url += 1;\n    continue;\n  }\n\n  if (!titleRaw) {\n    rejected.no_title += 1;\n    continue;\n  }\n\n  // Extract hostname without using the URL class,\n  // because this n8n environment does not expose it inside Code nodes.\n  const hostMatch = sourceUrl.match(/^https?:\\/\\/([^/:?#]+)/i);\n\n  if (!hostMatch) {\n    rejected.no_url += 1;\n    continue;\n  }\n\n  const host = hostMatch[1].toLowerCase();\n\n  if (!allowed.includes(host)) {\n    rejected.domain_mismatch += 1;\n    continue;\n  }\n\n  out.push({\n    json: {\n      source_id: src.id,\n      source_url: sourceUrl,\n      title_raw: titleRaw.slice(0, 2000),\n      content_raw: String(r.content_raw || '').trim().slice(0, 50000),\n      publication_date: r.publication_date || null,\n      attachments: Array.isArray(r.attachments)\n        ? r.attachments.slice(0, 5)\n        : [],\n      fetched_at: r.fetched_at || new Date().toISOString(),\n\n      // Carried through so M9 can log against the correct source.\n      source: {\n        id: src.id,\n        country: src.country,\n        authority_ar: src.authority_ar,\n        allowed_domains: src.allowed_domains,\n      },\n    },\n  });\n}\n\nconsole.log(\n  `normalised ${out.length} items; rejected ${JSON.stringify(rejected)}`\n);\n\n// A genuinely empty result must still leave exactly one item behind, or every\n// downstream node (including the log write) is skipped by n8n's zero-item rule\n// and the run vanishes without a workflow_logs row or a webhook response.\nif (out.length === 0) {\n  return [{ json: { __empty: true, raw_count: $input.all().length, rejected } }];\n}\n\n// M9 attaches the AI stage and the Publishing Gate to this output.\nreturn out;"
+        "jsCode": "// Normalises and validates every RawItem before anything downstream sees it.\n//\n// This is the single contract between parsing and the M9 AI stage: whatever\n// lane produced an item, it leaves here in the same shape or not at all.\n\nconst src = $('Called by scheduler').first().json.source;\n\nconst allowed = (src.allowed_domains || [])\n  .map((domain) => String(domain).trim().toLowerCase())\n  .filter(Boolean);\n\nconst out = [];\nconst rejected = {\n  no_url: 0,\n  no_title: 0,\n  domain_mismatch: 0,\n};\n\nfor (const item of $input.all()) {\n  const r = item.json;\n\n  const sourceUrl = String(r.source_url || '').trim();\n  const titleRaw = String(r.title_raw || '').trim();\n\n  if (!sourceUrl) {\n    rejected.no_url += 1;\n    continue;\n  }\n\n  if (!titleRaw) {\n    rejected.no_title += 1;\n    continue;\n  }\n\n  // Extract hostname without using the URL class,\n  // because this n8n environment does not expose it inside Code nodes.\n  const hostMatch = sourceUrl.match(/^https?:\\/\\/([^/:?#]+)/i);\n\n  if (!hostMatch) {\n    rejected.no_url += 1;\n    continue;\n  }\n\n  const host = hostMatch[1].toLowerCase();\n\n  // A discovery pseudo-source's own allow-list (news.google.com) describes\n  // ITS domain, not the real-world domain a discovered item resolved to.\n  // That resolution already happened in Workflow 05 (matched against a real\n  // official source's allow-list, or left as discovery on purpose); the\n  // Publishing Gate re-applies the same bypass at publish time. Re-checking\n  // a fixed allow-list here would reject every genuine discovery find.\n  const isDiscoverySource = src.ingestion_mode === 'discovery';\n  if (!isDiscoverySource && !allowed.includes(host)) {\n    rejected.domain_mismatch += 1;\n    continue;\n  }\n\n  out.push({\n    json: {\n      source_id: src.id,\n      source_url: sourceUrl,\n      title_raw: titleRaw.slice(0, 2000),\n      content_raw: String(r.content_raw || '').trim().slice(0, 50000),\n      publication_date: r.publication_date || null,\n      attachments: Array.isArray(r.attachments)\n        ? r.attachments.slice(0, 5)\n        : [],\n      fetched_at: r.fetched_at || new Date().toISOString(),\n      // M13 hybrid discovery — absent (undefined) on every official-lane\n      // item, so it defaults through Workflow 03 exactly as before.\n      origin_type: r.origin_type || undefined,\n      canonical_url: r.canonical_url || undefined,\n      discovery_engine: r.discovery_engine || undefined,\n\n      // Carried through so M9 can log against the correct source.\n      source: {\n        id: src.id,\n        country: src.country,\n        authority_ar: src.authority_ar,\n        allowed_domains: src.allowed_domains,\n        ingestion_mode: src.ingestion_mode,\n      },\n    },\n  });\n}\n\nconsole.log(\n  `normalised ${out.length} items; rejected ${JSON.stringify(rejected)}`\n);\n\n// A genuinely empty result must still leave exactly one item behind, or every\n// downstream node (including the log write) is skipped by n8n's zero-item rule\n// and the run vanishes without a workflow_logs row or a webhook response.\nif (out.length === 0) {\n  return [{ json: { __empty: true, raw_count: $input.all().length, rejected } }];\n}\n\n// M9 attaches the AI stage and the Publishing Gate to this output.\nreturn out;"
       },
       "id": "871b4a68-729a-4d68-9886-b6e57016a7e3",
       "name": "Normalise RawItem",
@@ -624,6 +624,49 @@
         1200,
         160
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ Array.isArray($json.prefetched_items) && $json.prefetched_items.length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "256ef4cd-4ac1-4316-becf-84a5c9547b4c",
+      "name": "Has prefetched items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -256,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Workflow 05 (Discovery Ingestion) already resolved and shaped these items\n// — this just turns the ONE trigger item's prefetched_items array into\n// separate n8n items, the same shape \"Merge lanes\" produces for an ordinary\n// official-lane crawl, so Normalise RawItem treats both identically.\nconst items = $('Called by scheduler').first().json.prefetched_items || [];\nreturn items.map((it) => ({ json: it }));"
+      },
+      "id": "44c581d4-6683-4960-a5ca-478d9951983d",
+      "name": "Unwrap prefetched items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        480
+      ]
     }
   ],
   "connections": {
@@ -631,7 +674,7 @@
       "main": [
         [
           {
-            "node": "Parser router",
+            "node": "Has prefetched items?",
             "type": "main",
             "index": 0
           }
@@ -1001,6 +1044,35 @@
           }
         ]
       ]
+    },
+    "Has prefetched items?": {
+      "main": [
+        [
+          {
+            "node": "Unwrap prefetched items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parser router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unwrap prefetched items": {
+      "main": [
+        [
+          {
+            "node": "Normalise RawItem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -1014,9 +1086,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "65160952-5543-4a14-bdd3-cd6de7db288f",
-  "activeVersionId": "65160952-5543-4a14-bdd3-cd6de7db288f",
-  "versionCounter": 42,
+  "versionId": "cb9a92ff-556d-4ea7-a60d-29c1720c9016",
+  "activeVersionId": "cb9a92ff-556d-4ea7-a60d-29c1720c9016",
+  "versionCounter": 45,
   "triggerCount": 0,
   "shared": [
     {
@@ -1085,9 +1157,9 @@
     }
   ],
   "activeVersion": {
-    "updatedAt": "2026-08-03T08:13:23.418Z",
-    "createdAt": "2026-08-03T08:13:23.418Z",
-    "versionId": "65160952-5543-4a14-bdd3-cd6de7db288f",
+    "updatedAt": "2026-08-03T11:19:16.345Z",
+    "createdAt": "2026-08-03T11:19:16.345Z",
+    "versionId": "cb9a92ff-556d-4ea7-a60d-29c1720c9016",
     "workflowId": "FHt8uKbBcixIWbWO",
     "nodes": [
       {
@@ -1402,7 +1474,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// Normalises and validates every RawItem before anything downstream sees it.\n//\n// This is the single contract between parsing and the M9 AI stage: whatever\n// lane produced an item, it leaves here in the same shape or not at all.\n\nconst src = $('Called by scheduler').first().json.source;\n\nconst allowed = (src.allowed_domains || [])\n  .map((domain) => String(domain).trim().toLowerCase())\n  .filter(Boolean);\n\nconst out = [];\nconst rejected = {\n  no_url: 0,\n  no_title: 0,\n  domain_mismatch: 0,\n};\n\nfor (const item of $input.all()) {\n  const r = item.json;\n\n  const sourceUrl = String(r.source_url || '').trim();\n  const titleRaw = String(r.title_raw || '').trim();\n\n  if (!sourceUrl) {\n    rejected.no_url += 1;\n    continue;\n  }\n\n  if (!titleRaw) {\n    rejected.no_title += 1;\n    continue;\n  }\n\n  // Extract hostname without using the URL class,\n  // because this n8n environment does not expose it inside Code nodes.\n  const hostMatch = sourceUrl.match(/^https?:\\/\\/([^/:?#]+)/i);\n\n  if (!hostMatch) {\n    rejected.no_url += 1;\n    continue;\n  }\n\n  const host = hostMatch[1].toLowerCase();\n\n  if (!allowed.includes(host)) {\n    rejected.domain_mismatch += 1;\n    continue;\n  }\n\n  out.push({\n    json: {\n      source_id: src.id,\n      source_url: sourceUrl,\n      title_raw: titleRaw.slice(0, 2000),\n      content_raw: String(r.content_raw || '').trim().slice(0, 50000),\n      publication_date: r.publication_date || null,\n      attachments: Array.isArray(r.attachments)\n        ? r.attachments.slice(0, 5)\n        : [],\n      fetched_at: r.fetched_at || new Date().toISOString(),\n\n      // Carried through so M9 can log against the correct source.\n      source: {\n        id: src.id,\n        country: src.country,\n        authority_ar: src.authority_ar,\n        allowed_domains: src.allowed_domains,\n      },\n    },\n  });\n}\n\nconsole.log(\n  `normalised ${out.length} items; rejected ${JSON.stringify(rejected)}`\n);\n\n// A genuinely empty result must still leave exactly one item behind, or every\n// downstream node (including the log write) is skipped by n8n's zero-item rule\n// and the run vanishes without a workflow_logs row or a webhook response.\nif (out.length === 0) {\n  return [{ json: { __empty: true, raw_count: $input.all().length, rejected } }];\n}\n\n// M9 attaches the AI stage and the Publishing Gate to this output.\nreturn out;"
+          "jsCode": "// Normalises and validates every RawItem before anything downstream sees it.\n//\n// This is the single contract between parsing and the M9 AI stage: whatever\n// lane produced an item, it leaves here in the same shape or not at all.\n\nconst src = $('Called by scheduler').first().json.source;\n\nconst allowed = (src.allowed_domains || [])\n  .map((domain) => String(domain).trim().toLowerCase())\n  .filter(Boolean);\n\nconst out = [];\nconst rejected = {\n  no_url: 0,\n  no_title: 0,\n  domain_mismatch: 0,\n};\n\nfor (const item of $input.all()) {\n  const r = item.json;\n\n  const sourceUrl = String(r.source_url || '').trim();\n  const titleRaw = String(r.title_raw || '').trim();\n\n  if (!sourceUrl) {\n    rejected.no_url += 1;\n    continue;\n  }\n\n  if (!titleRaw) {\n    rejected.no_title += 1;\n    continue;\n  }\n\n  // Extract hostname without using the URL class,\n  // because this n8n environment does not expose it inside Code nodes.\n  const hostMatch = sourceUrl.match(/^https?:\\/\\/([^/:?#]+)/i);\n\n  if (!hostMatch) {\n    rejected.no_url += 1;\n    continue;\n  }\n\n  const host = hostMatch[1].toLowerCase();\n\n  // A discovery pseudo-source's own allow-list (news.google.com) describes\n  // ITS domain, not the real-world domain a discovered item resolved to.\n  // That resolution already happened in Workflow 05 (matched against a real\n  // official source's allow-list, or left as discovery on purpose); the\n  // Publishing Gate re-applies the same bypass at publish time. Re-checking\n  // a fixed allow-list here would reject every genuine discovery find.\n  const isDiscoverySource = src.ingestion_mode === 'discovery';\n  if (!isDiscoverySource && !allowed.includes(host)) {\n    rejected.domain_mismatch += 1;\n    continue;\n  }\n\n  out.push({\n    json: {\n      source_id: src.id,\n      source_url: sourceUrl,\n      title_raw: titleRaw.slice(0, 2000),\n      content_raw: String(r.content_raw || '').trim().slice(0, 50000),\n      publication_date: r.publication_date || null,\n      attachments: Array.isArray(r.attachments)\n        ? r.attachments.slice(0, 5)\n        : [],\n      fetched_at: r.fetched_at || new Date().toISOString(),\n      // M13 hybrid discovery — absent (undefined) on every official-lane\n      // item, so it defaults through Workflow 03 exactly as before.\n      origin_type: r.origin_type || undefined,\n      canonical_url: r.canonical_url || undefined,\n      discovery_engine: r.discovery_engine || undefined,\n\n      // Carried through so M9 can log against the correct source.\n      source: {\n        id: src.id,\n        country: src.country,\n        authority_ar: src.authority_ar,\n        allowed_domains: src.allowed_domains,\n        ingestion_mode: src.ingestion_mode,\n      },\n    },\n  });\n}\n\nconsole.log(\n  `normalised ${out.length} items; rejected ${JSON.stringify(rejected)}`\n);\n\n// A genuinely empty result must still leave exactly one item behind, or every\n// downstream node (including the log write) is skipped by n8n's zero-item rule\n// and the run vanishes without a workflow_logs row or a webhook response.\nif (out.length === 0) {\n  return [{ json: { __empty: true, raw_count: $input.all().length, rejected } }];\n}\n\n// M9 attaches the AI stage and the Publishing Gate to this output.\nreturn out;"
         },
         "id": "871b4a68-729a-4d68-9886-b6e57016a7e3",
         "name": "Normalise RawItem",
@@ -1707,6 +1779,49 @@
           1200,
           160
         ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "version": 2
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ Array.isArray($json.prefetched_items) && $json.prefetched_items.length > 0 }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "256ef4cd-4ac1-4316-becf-84a5c9547b4c",
+        "name": "Has prefetched items?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          -256,
+          480
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Workflow 05 (Discovery Ingestion) already resolved and shaped these items\n// — this just turns the ONE trigger item's prefetched_items array into\n// separate n8n items, the same shape \"Merge lanes\" produces for an ordinary\n// official-lane crawl, so Normalise RawItem treats both identically.\nconst items = $('Called by scheduler').first().json.prefetched_items || [];\nreturn items.map((it) => ({ json: it }));"
+        },
+        "id": "44c581d4-6683-4960-a5ca-478d9951983d",
+        "name": "Unwrap prefetched items",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -16,
+          480
+        ]
       }
     ],
     "connections": {
@@ -1714,7 +1829,7 @@
         "main": [
           [
             {
-              "node": "Parser router",
+              "node": "Has prefetched items?",
               "type": "main",
               "index": 0
             }
@@ -2084,6 +2199,35 @@
             }
           ]
         ]
+      },
+      "Has prefetched items?": {
+        "main": [
+          [
+            {
+              "node": "Unwrap prefetched items",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Parser router",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Unwrap prefetched items": {
+        "main": [
+          [
+            {
+              "node": "Normalise RawItem",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Asayel Qaid",
@@ -2092,10 +2236,10 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-08-03T08:13:23.501Z",
-        "id": 439,
+        "createdAt": "2026-08-03T11:19:16.439Z",
+        "id": 447,
         "workflowId": "FHt8uKbBcixIWbWO",
-        "versionId": "65160952-5543-4a14-bdd3-cd6de7db288f",
+        "versionId": "cb9a92ff-556d-4ea7-a60d-29c1720c9016",
         "event": "activated",
         "userId": "c6441430-2935-43cb-a7bd-db0da8ae18ce"
       }

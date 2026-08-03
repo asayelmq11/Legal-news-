@@ -40,7 +40,7 @@ const BASE_COLUMNS = `
  * read it. Making that impossible would need separate Postgres roles; see the
  * note in docs/IMPLEMENTATION_PLAN.md §17.
  */
-const ADMIN_COLUMNS = `${BASE_COLUMNS}, confidence, ai_model, content_hash`
+const ADMIN_COLUMNS = `${BASE_COLUMNS}, confidence, ai_model, content_hash, origin_type, canonical_url, discovery_engine`
 
 export interface SourceRef {
   id: string
@@ -72,6 +72,9 @@ export interface ArchiveItem {
   confidence?: number
   ai_model?: string
   content_hash?: string
+  origin_type?: Enums<'origin_type'>
+  canonical_url?: string | null
+  discovery_engine?: string | null
 }
 
 export interface ArchivePage {

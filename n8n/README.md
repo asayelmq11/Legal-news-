@@ -6,12 +6,25 @@ reads it.
 
 ```
 workflows/
-  01-source-scheduler.json   hourly dispatcher — picks due sources    (M8)
-  02-source-ingestion.json   four parser lanes → normalised RawItem   (M8)
-  03-publishing-gate.json    the five publish rules + archive insert   (M9)
-  04-retry-health-manual     backoff, health snapshot, "Run now"      (M10)
-  05-weekly-newsletter       digest + newsletter_history              (M11)
+  01-source-scheduler.json      hourly dispatcher — picks due sources     (M8)
+  02-source-ingestion.json      four parser lanes → normalised RawItem    (M8)
+  03-publishing-gate.json       the five publish rules + archive insert    (M9)
+  04-retry-health-manual        backoff, health snapshot, "Run now"       (M10)
+  06-discovery-ingestion.json   Google News → resolve → same pipeline     (M13)
+  05-weekly-newsletter          digest + newsletter_history — not built    (M11)
 ```
+
+**M13 — hybrid discovery.** The 52-source registry proved that a dedicated
+parser per authority does not scale (see
+`docs/source-provisioning-2026-08-02.md`): most GCC portals sit behind a WAF,
+run a legacy stack with no feed, or are unreachable from n8n's egress. `06 —
+Discovery Ingestion` adds a second way to find a legal update — a discovery
+engine (Google News today) that is explicitly NOT a publishing source —
+without adding a second pipeline. It resolves each candidate against the
+official-source registry where possible, then dispatches into the SAME
+`02 — Source Ingestion` → `03 — Publishing Gate` chain every other source
+uses. Full design and live verification:
+[`docs/hybrid-discovery-architecture-2026-08-03.md`](../docs/hybrid-discovery-architecture-2026-08-03.md).
 
 ---
 
@@ -131,7 +144,7 @@ drift between callers. It applies, in order:
 |---|---|---|
 | 0 | the confidence threshold itself is present and sane | `missing_confidence_threshold` |
 | 1 | source exists, is `active` and `verified` — **re-read at publish time** | `inactive_source` · `unverified_source` |
-| 2 | item hostname is in the source's `allowed_domains` | `domain_mismatch` |
+| 2 | item hostname is in the source's `allowed_domains` — **skipped for a discovery-mode source** (§6) | `domain_mismatch` |
 | 3 | `content_hash` not already present | `duplicate` |
 | 4 | `confidence >= ai.confidence_threshold` | `low_confidence` |
 | 5 | `is_legal_update === true` | `not_legal_update` |
@@ -151,8 +164,57 @@ error would make a healthy source look broken.
 `rejection_reasons` tally. Rejections are counted, not logged individually — a
 rejection is a normal decision, not an incident.
 
-## 6. What is not here yet
+## 6. Hybrid discovery (M13)
 
-M10 adds persistent retry state, the health snapshot and the manual "Run now"
-webhook; M11 adds the newsletter. The scheduler already respects `next_retry_at`,
-so M10 slots in without changing it.
+`sources.ingestion_mode` is `official` (default, unchanged for all 52
+registry sources), `discovery`, or `hybrid`. It is a different axis from
+`source_type` (which classifies the AUTHORITY — gazette/government/regulator/
+gcc/approved_news) — a discovery pseudo-source's `source_type` is the new
+`discovery_engine` value, orthogonal to how it is reached.
+
+**`06 — Discovery Ingestion`** runs every 2 hours:
+
+1. Fetches each active `ingestion_mode = 'discovery'` source's `feed_url` —
+   today, one Google News RSS query per GCC country (see
+   `lib/discovery/discovery.ts` for the exact phrases and the tested spec
+   this node mirrors).
+2. Parses each `<item>`, keying off the `<source url="…">` attribute — NOT
+   `<link>`, which is a client-side JS redirect shell with no server-side
+   resolution target (confirmed empirically; see
+   `docs/hybrid-discovery-architecture-2026-08-03.md`).
+3. Deduplicates within the run by normalised title, then resolves each
+   candidate against every active + verified **non-discovery** source:
+   a `domain_match` (the resolved domain is a real official's own
+   `allowed_domains`) or a strong `authority_name_match` (confidence ≥ 60 —
+   see `resolveDiscoveredItem`) promotes the item to `origin_type = official`
+   with that source's own id; anything weaker keeps `origin_type =
+   'discovery'` and is attributed to the discovery pseudo-source itself.
+4. Groups resolved candidates by target source and dispatches each group into
+   `02 — Source Ingestion` exactly like the scheduler does — via a new
+   `prefetched_items` bypass (`Has prefetched items?` → `Unwrap prefetched
+   items` → `Normalise RawItem`) that skips the four fetch lanes entirely,
+   since Workflow 05 already fetched and resolved the items.
+
+**The domain allow-list is bypassed only for `ingestion_mode = 'discovery'`**
+— in `Normalise RawItem` AND independently re-checked in the Publishing
+Gate's `Apply the five rules` (both re-derive `isDiscoverySource` from the
+re-read source row, never trust a flag carried on the item). Every other
+rule — confidence threshold, duplicate hash, `is_legal_update`, publication
+date — applies identically. A discovery-origin item that is not legally
+relevant is rejected exactly like an official one; the discovery layer only
+ever widens WHERE something is looked for, never what gets published.
+
+`legal_updates.origin_type` (`official`/`discovery`), `canonical_url`, and
+`discovery_engine` record, per item, how it was actually found — a `hybrid`
+source can have some items officially crawled and others discovered in the
+same run.
+
+**Known limitation, not silently worked around:** Bing News requires a paid
+Azure Cognitive Services subscription key not available in this environment.
+Documented, not faked — see the architecture doc for what a real
+implementation would need.
+
+## 7. What is not here yet
+
+M11 adds the newsletter. The scheduler already respects `next_retry_at`, so
+M10 slots in without changing it.

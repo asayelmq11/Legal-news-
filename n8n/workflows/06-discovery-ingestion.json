@@ -1,0 +1,876 @@
+{
+  "updatedAt": "2026-08-03T11:46:11.608Z",
+  "createdAt": "2026-08-03T11:23:07.947Z",
+  "id": "vCGP6RoEAhiG9LS5",
+  "name": "06 — Discovery Ingestion",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "3cfe7178-7109-4311-a266-c2b1fd3fc9bc",
+      "name": "Every 2 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1136,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "sources",
+        "returnAll": true
+      },
+      "id": "d7ccc504-949b-43e7-99d8-f85d126bc455",
+      "name": "Get discovery sources",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1136,
+        304
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "10zDIxzQYFnJuOmh",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().filter((i) => i.json.ingestion_mode === 'discovery' && i.json.active === true);"
+      },
+      "id": "90f7ae86-0f1f-4062-85a5-af8a2be276ca",
+      "name": "Filter discovery sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -912,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "sources",
+        "returnAll": true
+      },
+      "id": "072c7ad6-3315-4ab2-be22-8efcc82feef0",
+      "name": "Get official sources",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -912,
+        496
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "10zDIxzQYFnJuOmh",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.feed_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "fullResponse": true
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "14956514-89d0-4080-b2fe-a81c84b57e1e",
+      "name": "Fetch discovery feed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -688,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Regex-parses each discovery source's Google News RSS response into\n// individual candidate items, tagging each with the discovery source it\n// came from. Positional zip against \"Filter discovery sources\" — safe because\n// \"Fetch discovery feed\" uses onError: continueRegularOutput, which never\n// changes item count or order.\n//\n// Google News RSS is well-formed but idiosyncratic: <link> is a client-side\n// JS redirect shell with no server-resolvable target (confirmed empirically\n// — see docs/hybrid-discovery-architecture-2026-08-03.md), so the reliable\n// signal for \"who actually published this\" is the <source url> attribute,\n// not <link>.\n\nconst decodeEntities = (s) => String(s || '')\n  .replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1')\n  .replace(/&amp;/g, '&')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&quot;/g, '\"')\n  .replace(/&#39;|&apos;/g, \"'\")\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&#(\\d+);/g, (_, code) => String.fromCodePoint(Number(code)))\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nconst discoverySources = $('Filter discovery sources').all().map(i => i.json);\nconst fetchResults = $input.all().map(i => i.json);\n\nconst candidates = [];\nfor (let idx = 0; idx < fetchResults.length; idx += 1) {\n  const src = discoverySources[idx];\n  const res = fetchResults[idx];\n  if (!src || !res || res.error) continue;\n\n  const xml = typeof res.data === 'string' ? res.data : (typeof res.body === 'string' ? res.body : '');\n  const blocks = [...xml.matchAll(/<item>([\\s\\S]*?)<\\/item>/g)].map((m) => m[1]);\n\n  for (const block of blocks) {\n    const title = (block.match(/<title>([\\s\\S]*?)<\\/title>/) || [])[1] || '';\n    const link = (block.match(/<link>([\\s\\S]*?)<\\/link>/) || [])[1] || '';\n    const pubDate = (block.match(/<pubDate>([\\s\\S]*?)<\\/pubDate>/) || [])[1] || null;\n    const sourceTag = block.match(/<source url=\"([^\"]*)\">([^<]*)<\\/source>/);\n    const description = (block.match(/<description>([\\s\\S]*?)<\\/description>/) || [])[1] || null;\n\n    const cleanTitle = decodeEntities(title);\n    if (!cleanTitle || !link.trim()) continue;\n\n    candidates.push({ json: {\n      title: cleanTitle,\n      link: link.trim(),\n      pubDate,\n      sourceUrl: sourceTag ? sourceTag[1] : null,\n      sourceName: sourceTag ? decodeEntities(sourceTag[2]) : null,\n      description: description ? decodeEntities(description) : null,\n      discoverySource: src,\n    }});\n  }\n}\n\nconsole.log(JSON.stringify({ stage: 'discovery_parse', candidates: candidates.length, feeds: discoverySources.length }));\nreturn candidates;"
+      },
+      "id": "85cdbf9d-f743-43b2-b3d7-88bdb5bdf9a3",
+      "name": "Parse discovery feed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      },
+      "id": "69e42f86-d792-4a5c-98e1-c38c0fb46e62",
+      "name": "Merge for resolution",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── OFFICIAL SOURCE RESOLUTION + GROUPING ───────────────────────────────────\n// Mirrors lib/discovery/discovery.ts (resolveDiscoveredItem), the tested\n// specification. Every candidate is deduplicated within this run, resolved\n// to an official source when the evidence is strong enough, and grouped by\n// its final target source so each group becomes ONE dispatch into Workflow\n// 02 — identical to how the scheduler dispatches one execution per source.\n//\n// Nothing here decides what gets PUBLISHED. Every group still goes through\n// Normalise RawItem, AI classification and the Publishing Gate exactly like\n// an official crawl. This only decides where an item's evidence trail points.\n//\n// \"Get official sources\" has no OTHER downstream connection, and n8n's\n// execution planner can skip a node that only some other node's expression\n// references via $('...') rather than a real graph edge (see\n// docs/n8n-fixes-2026-08-02.md, incident #5, for the identical failure mode\n// hit and fixed once already in this project). The fix here is the same:\n// \"Merge for resolution\" gives it a REAL edge into this node, and the two\n// input streams are told apart by shape — official source rows have\n// allowed_domains; parsed candidates have a title and a discoverySource —\n// exactly how \"Merge state\" in Workflows 01/04 already separates settings\n// rows from source rows.\nconst all = $input.all().map((i) => i.json);\n// Same in-memory filter as \"Filter discovery sources\" — only a source the\n// database itself would let the scheduler crawl may receive a resolved item.\n// Matching a candidate to a pending/blocked/unverified source would only be\n// caught later at the Publishing Gate (rule 1 re-reads it anyway), but\n// there is no reason to credit an item to a source that cannot publish it.\nconst officialSources = all.filter(\n  (r) => Array.isArray(r.allowed_domains) && r.ingestion_mode !== 'discovery' && r.active === true && r.config_status === 'verified',\n);\nconst parsedCandidates = all.filter((r) => typeof r.title === 'string' && r.discoverySource);\n\nfunction hostnameOf(url) {\n  const m = String(url || '').match(/^https?:\\/\\/([^/:?#]+)/i);\n  return m ? m[1].toLowerCase() : null;\n}\n\nfunction matchOfficialDomain(hostname) {\n  if (!hostname) return null;\n  const hit = officialSources.find((s) => (s.allowed_domains || []).some((d) => String(d).toLowerCase() === hostname));\n  return hit ? { sourceId: hit.id, method: 'domain_match', confidence: 100 } : null;\n}\n\nfunction matchAuthorityMention(title) {\n  const text = String(title || '').trim();\n  if (!text) return null;\n  let best = null;\n  for (const s of officialSources) {\n    for (const name of [s.authority_ar, s.authority_en]) {\n      const candidate = String(name || '').trim();\n      if (candidate.length < 4 || !text.includes(candidate)) continue;\n      const confidence = Math.min(95, 40 + candidate.length);\n      if (!best || confidence > best.confidence) {\n        best = { sourceId: s.id, method: 'authority_name_match', confidence, matchedName: candidate };\n      }\n    }\n  }\n  return best;\n}\n\nconst seenTitles = new Set();\nconst groups = {};\n\nfor (const c of parsedCandidates) {\n  const normTitle = c.title.replace(/\\s+/g, ' ').trim().toLowerCase();\n  if (!normTitle || seenTitles.has(normTitle)) continue;\n  seenTitles.add(normTitle);\n\n  const domainHit = matchOfficialDomain(hostnameOf(c.sourceUrl));\n  let resolved;\n  if (domainHit) {\n    resolved = { originType: 'official', sourceId: domainHit.sourceId, canonicalUrl: c.sourceUrl, verificationMethod: 'domain_match' };\n  } else {\n    const nameHit = matchAuthorityMention(c.title);\n    if (nameHit && nameHit.confidence >= 60) {\n      resolved = { originType: 'official', sourceId: nameHit.sourceId, canonicalUrl: null, verificationMethod: 'authority_name_match' };\n    } else {\n      resolved = { originType: 'discovery', sourceId: c.discoverySource.id, canonicalUrl: null, verificationMethod: null };\n    }\n  }\n\n  let publicationDate = null;\n  if (c.pubDate) {\n    const d = new Date(c.pubDate);\n    if (!Number.isNaN(d.getTime())) publicationDate = d.toISOString().slice(0, 10);\n  }\n\n  const groupSource = resolved.originType === 'official'\n    ? officialSources.find((s) => s.id === resolved.sourceId)\n    : c.discoverySource;\n  if (!groupSource) continue;\n\n  if (!groups[resolved.sourceId]) groups[resolved.sourceId] = { source: groupSource, items: [] };\n  groups[resolved.sourceId].items.push({\n    source_url: resolved.canonicalUrl || c.link,\n    title_raw: c.title,\n    content_raw: c.description || '',\n    publication_date: publicationDate,\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n    origin_type: resolved.originType,\n    canonical_url: resolved.canonicalUrl,\n    discovery_engine: 'google_news',\n  });\n}\n\nconst runTag = Date.now();\nconst dispatches = Object.entries(groups).map(([sourceId, g], i) => ({ json: {\n  source: g.source,\n  prefetched_items: g.items,\n  trigger_type: 'manual',\n  dispatched_at: new Date().toISOString(),\n  correlation_id: `discovery-${runTag}-${i}`,\n  requested_by: null,\n}}));\n\nconsole.log(JSON.stringify({\n  stage: 'discovery_resolve',\n  candidates_in: parsedCandidates.length,\n  after_dedup: seenTitles.size,\n  groups: dispatches.length,\n  official_groups: dispatches.filter((d) => d.json.source.ingestion_mode !== 'discovery').length,\n}));\n\nif (dispatches.length === 0) {\n  return [{ json: { __no_candidates: true } }];\n}\nreturn dispatches;"
+      },
+      "id": "c6a01e5a-b8c9-4385-9b4e-b8a97dc17c8f",
+      "name": "Resolve and group items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.__no_candidates }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b183fa12-e41a-4fc3-9257-2aa5eeb10f9d",
+      "name": "Has dispatches?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -16,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One health update per DISPATCHED GROUP, not per fetched discovery source —\n// last_discovery_success on the group's own row when it IS the discovery\n// pseudo-source, last_official_success on the matched row when a group\n// resolved to a real official source. A source with zero candidates this\n// run (no dispatch group at all) is left untouched rather than stamped with\n// a success it did not have — see docs/hybrid-discovery-architecture-\n// 2026-08-03.md for what is and is not wired up yet.\nconst now = new Date().toISOString();\nreturn $input.all().map((entry) => {\n  const g = entry.json;\n  const isDiscovery = g.source.ingestion_mode === 'discovery';\n  return { json: {\n    source_id: g.source.id,\n    last_discovery_success: isDiscovery ? now : g.source.last_discovery_success,\n    last_official_success: isDiscovery ? g.source.last_official_success : now,\n    updated_at: now,\n  }};\n});"
+      },
+      "id": "ed04e907-e857-4d13-bd23-1ac690e71255",
+      "name": "Build health update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "sources",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.source_id }}"
+            }
+          ]
+        },
+        "dataToSend": "autoMapInputData"
+      },
+      "id": "3efe4643-b8cf-42fb-8781-3e56cd2fbf33",
+      "name": "Update discovery health",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        432,
+        336
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "10zDIxzQYFnJuOmh",
+          "name": "Supabase account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "FHt8uKbBcixIWbWO",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/FHt8uKbBcixIWbWO",
+          "cachedResultName": "02 — Source Ingestion"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "mode": "each"
+      },
+      "id": "12170f6d-652c-4e99-b6b8-56dc3aabba63",
+      "name": "Dispatch to ingestion",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        208,
+        336
+      ]
+    }
+  ],
+  "connections": {
+    "Every 2 hours": {
+      "main": [
+        [
+          {
+            "node": "Get discovery sources",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get official sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get discovery sources": {
+      "main": [
+        [
+          {
+            "node": "Filter discovery sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter discovery sources": {
+      "main": [
+        [
+          {
+            "node": "Fetch discovery feed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch discovery feed": {
+      "main": [
+        [
+          {
+            "node": "Parse discovery feed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse discovery feed": {
+      "main": [
+        [
+          {
+            "node": "Merge for resolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get official sources": {
+      "main": [
+        [
+          {
+            "node": "Merge for resolution",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge for resolution": {
+      "main": [
+        [
+          {
+            "node": "Resolve and group items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve and group items": {
+      "main": [
+        [
+          {
+            "node": "Has dispatches?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has dispatches?": {
+      "main": [
+        [
+          {
+            "node": "Build health update",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Dispatch to ingestion",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Build health update": {
+      "main": [
+        [
+          {
+            "node": "Update discovery health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:Every 2 hours": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "6a55c5b3-8277-4fea-aae4-b878aba53c72",
+  "activeVersionId": "6a55c5b3-8277-4fea-aae4-b878aba53c72",
+  "versionCounter": 25,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-08-03T11:23:07.947Z",
+      "createdAt": "2026-08-03T11:23:07.947Z",
+      "role": "workflow:owner",
+      "workflowId": "vCGP6RoEAhiG9LS5",
+      "projectId": "Fo19xH6yJI9Yypvs",
+      "project": {
+        "updatedAt": "2026-06-03T20:11:11.632Z",
+        "createdAt": "2026-06-03T19:16:50.624Z",
+        "id": "Fo19xH6yJI9Yypvs",
+        "name": "Asayel Qaid <asayelmq@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "c6441430-2935-43cb-a7bd-db0da8ae18ce",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-06-03T19:16:50.624Z",
+            "createdAt": "2026-06-03T19:16:50.624Z",
+            "userId": "c6441430-2935-43cb-a7bd-db0da8ae18ce",
+            "projectId": "Fo19xH6yJI9Yypvs",
+            "user": {
+              "updatedAt": "2026-08-02T21:18:02.485Z",
+              "createdAt": "2026-06-03T19:16:50.624Z",
+              "id": "c6441430-2935-43cb-a7bd-db0da8ae18ce",
+              "email": "asayelmq@gmail.com",
+              "firstName": "Asayel",
+              "lastName": "Qaid",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-06-03T20:12:25.559Z",
+                "personalization_survey_n8n_version": "2.7.4",
+                "automationGoalDevops": [
+                  "reporting",
+                  "ticketing-systems-integrations"
+                ],
+                "companySize": "20-99",
+                "companyType": "systems-integrator",
+                "role": "it",
+                "reportedSource": "friend"
+              },
+              "settings": {
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "FHt8uKbBcixIWbWO",
+                "userActivated": true,
+                "userActivatedAt": 1785650091040
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-08-02",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-08-03T11:45:43.749Z",
+    "createdAt": "2026-08-03T11:45:43.749Z",
+    "versionId": "6a55c5b3-8277-4fea-aae4-b878aba53c72",
+    "workflowId": "vCGP6RoEAhiG9LS5",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours",
+                "hoursInterval": 2
+              }
+            ]
+          }
+        },
+        "id": "3cfe7178-7109-4311-a266-c2b1fd3fc9bc",
+        "name": "Every 2 hours",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -1136,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "tableId": "sources",
+          "returnAll": true
+        },
+        "id": "d7ccc504-949b-43e7-99d8-f85d126bc455",
+        "name": "Get discovery sources",
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          -1136,
+          304
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "10zDIxzQYFnJuOmh",
+            "name": "Supabase account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "return $input.all().filter((i) => i.json.ingestion_mode === 'discovery' && i.json.active === true);"
+        },
+        "id": "90f7ae86-0f1f-4062-85a5-af8a2be276ca",
+        "name": "Filter discovery sources",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -912,
+          304
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "tableId": "sources",
+          "returnAll": true
+        },
+        "id": "072c7ad6-3315-4ab2-be22-8efcc82feef0",
+        "name": "Get official sources",
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          -912,
+          496
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "10zDIxzQYFnJuOmh",
+            "name": "Supabase account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $json.feed_url }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "User-Agent",
+                "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+              }
+            ]
+          },
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "text",
+                "fullResponse": true
+              }
+            },
+            "timeout": 20000
+          }
+        },
+        "id": "14956514-89d0-4080-b2fe-a81c84b57e1e",
+        "name": "Fetch discovery feed",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -688,
+          304
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 2000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Regex-parses each discovery source's Google News RSS response into\n// individual candidate items, tagging each with the discovery source it\n// came from. Positional zip against \"Filter discovery sources\" — safe because\n// \"Fetch discovery feed\" uses onError: continueRegularOutput, which never\n// changes item count or order.\n//\n// Google News RSS is well-formed but idiosyncratic: <link> is a client-side\n// JS redirect shell with no server-resolvable target (confirmed empirically\n// — see docs/hybrid-discovery-architecture-2026-08-03.md), so the reliable\n// signal for \"who actually published this\" is the <source url> attribute,\n// not <link>.\n\nconst decodeEntities = (s) => String(s || '')\n  .replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1')\n  .replace(/&amp;/g, '&')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&quot;/g, '\"')\n  .replace(/&#39;|&apos;/g, \"'\")\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&#(\\d+);/g, (_, code) => String.fromCodePoint(Number(code)))\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nconst discoverySources = $('Filter discovery sources').all().map(i => i.json);\nconst fetchResults = $input.all().map(i => i.json);\n\nconst candidates = [];\nfor (let idx = 0; idx < fetchResults.length; idx += 1) {\n  const src = discoverySources[idx];\n  const res = fetchResults[idx];\n  if (!src || !res || res.error) continue;\n\n  const xml = typeof res.data === 'string' ? res.data : (typeof res.body === 'string' ? res.body : '');\n  const blocks = [...xml.matchAll(/<item>([\\s\\S]*?)<\\/item>/g)].map((m) => m[1]);\n\n  for (const block of blocks) {\n    const title = (block.match(/<title>([\\s\\S]*?)<\\/title>/) || [])[1] || '';\n    const link = (block.match(/<link>([\\s\\S]*?)<\\/link>/) || [])[1] || '';\n    const pubDate = (block.match(/<pubDate>([\\s\\S]*?)<\\/pubDate>/) || [])[1] || null;\n    const sourceTag = block.match(/<source url=\"([^\"]*)\">([^<]*)<\\/source>/);\n    const description = (block.match(/<description>([\\s\\S]*?)<\\/description>/) || [])[1] || null;\n\n    const cleanTitle = decodeEntities(title);\n    if (!cleanTitle || !link.trim()) continue;\n\n    candidates.push({ json: {\n      title: cleanTitle,\n      link: link.trim(),\n      pubDate,\n      sourceUrl: sourceTag ? sourceTag[1] : null,\n      sourceName: sourceTag ? decodeEntities(sourceTag[2]) : null,\n      description: description ? decodeEntities(description) : null,\n      discoverySource: src,\n    }});\n  }\n}\n\nconsole.log(JSON.stringify({ stage: 'discovery_parse', candidates: candidates.length, feeds: discoverySources.length }));\nreturn candidates;"
+        },
+        "id": "85cdbf9d-f743-43b2-b3d7-88bdb5bdf9a3",
+        "name": "Parse discovery feed",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -464,
+          304
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "append",
+          "options": {}
+        },
+        "id": "69e42f86-d792-4a5c-98e1-c38c0fb46e62",
+        "name": "Merge for resolution",
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3,
+        "position": [
+          -240,
+          304
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ── OFFICIAL SOURCE RESOLUTION + GROUPING ───────────────────────────────────\n// Mirrors lib/discovery/discovery.ts (resolveDiscoveredItem), the tested\n// specification. Every candidate is deduplicated within this run, resolved\n// to an official source when the evidence is strong enough, and grouped by\n// its final target source so each group becomes ONE dispatch into Workflow\n// 02 — identical to how the scheduler dispatches one execution per source.\n//\n// Nothing here decides what gets PUBLISHED. Every group still goes through\n// Normalise RawItem, AI classification and the Publishing Gate exactly like\n// an official crawl. This only decides where an item's evidence trail points.\n//\n// \"Get official sources\" has no OTHER downstream connection, and n8n's\n// execution planner can skip a node that only some other node's expression\n// references via $('...') rather than a real graph edge (see\n// docs/n8n-fixes-2026-08-02.md, incident #5, for the identical failure mode\n// hit and fixed once already in this project). The fix here is the same:\n// \"Merge for resolution\" gives it a REAL edge into this node, and the two\n// input streams are told apart by shape — official source rows have\n// allowed_domains; parsed candidates have a title and a discoverySource —\n// exactly how \"Merge state\" in Workflows 01/04 already separates settings\n// rows from source rows.\nconst all = $input.all().map((i) => i.json);\n// Same in-memory filter as \"Filter discovery sources\" — only a source the\n// database itself would let the scheduler crawl may receive a resolved item.\n// Matching a candidate to a pending/blocked/unverified source would only be\n// caught later at the Publishing Gate (rule 1 re-reads it anyway), but\n// there is no reason to credit an item to a source that cannot publish it.\nconst officialSources = all.filter(\n  (r) => Array.isArray(r.allowed_domains) && r.ingestion_mode !== 'discovery' && r.active === true && r.config_status === 'verified',\n);\nconst parsedCandidates = all.filter((r) => typeof r.title === 'string' && r.discoverySource);\n\nfunction hostnameOf(url) {\n  const m = String(url || '').match(/^https?:\\/\\/([^/:?#]+)/i);\n  return m ? m[1].toLowerCase() : null;\n}\n\nfunction matchOfficialDomain(hostname) {\n  if (!hostname) return null;\n  const hit = officialSources.find((s) => (s.allowed_domains || []).some((d) => String(d).toLowerCase() === hostname));\n  return hit ? { sourceId: hit.id, method: 'domain_match', confidence: 100 } : null;\n}\n\nfunction matchAuthorityMention(title) {\n  const text = String(title || '').trim();\n  if (!text) return null;\n  let best = null;\n  for (const s of officialSources) {\n    for (const name of [s.authority_ar, s.authority_en]) {\n      const candidate = String(name || '').trim();\n      if (candidate.length < 4 || !text.includes(candidate)) continue;\n      const confidence = Math.min(95, 40 + candidate.length);\n      if (!best || confidence > best.confidence) {\n        best = { sourceId: s.id, method: 'authority_name_match', confidence, matchedName: candidate };\n      }\n    }\n  }\n  return best;\n}\n\nconst seenTitles = new Set();\nconst groups = {};\n\nfor (const c of parsedCandidates) {\n  const normTitle = c.title.replace(/\\s+/g, ' ').trim().toLowerCase();\n  if (!normTitle || seenTitles.has(normTitle)) continue;\n  seenTitles.add(normTitle);\n\n  const domainHit = matchOfficialDomain(hostnameOf(c.sourceUrl));\n  let resolved;\n  if (domainHit) {\n    resolved = { originType: 'official', sourceId: domainHit.sourceId, canonicalUrl: c.sourceUrl, verificationMethod: 'domain_match' };\n  } else {\n    const nameHit = matchAuthorityMention(c.title);\n    if (nameHit && nameHit.confidence >= 60) {\n      resolved = { originType: 'official', sourceId: nameHit.sourceId, canonicalUrl: null, verificationMethod: 'authority_name_match' };\n    } else {\n      resolved = { originType: 'discovery', sourceId: c.discoverySource.id, canonicalUrl: null, verificationMethod: null };\n    }\n  }\n\n  let publicationDate = null;\n  if (c.pubDate) {\n    const d = new Date(c.pubDate);\n    if (!Number.isNaN(d.getTime())) publicationDate = d.toISOString().slice(0, 10);\n  }\n\n  const groupSource = resolved.originType === 'official'\n    ? officialSources.find((s) => s.id === resolved.sourceId)\n    : c.discoverySource;\n  if (!groupSource) continue;\n\n  if (!groups[resolved.sourceId]) groups[resolved.sourceId] = { source: groupSource, items: [] };\n  groups[resolved.sourceId].items.push({\n    source_url: resolved.canonicalUrl || c.link,\n    title_raw: c.title,\n    content_raw: c.description || '',\n    publication_date: publicationDate,\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n    origin_type: resolved.originType,\n    canonical_url: resolved.canonicalUrl,\n    discovery_engine: 'google_news',\n  });\n}\n\nconst runTag = Date.now();\nconst dispatches = Object.entries(groups).map(([sourceId, g], i) => ({ json: {\n  source: g.source,\n  prefetched_items: g.items,\n  trigger_type: 'manual',\n  dispatched_at: new Date().toISOString(),\n  correlation_id: `discovery-${runTag}-${i}`,\n  requested_by: null,\n}}));\n\nconsole.log(JSON.stringify({\n  stage: 'discovery_resolve',\n  candidates_in: parsedCandidates.length,\n  after_dedup: seenTitles.size,\n  groups: dispatches.length,\n  official_groups: dispatches.filter((d) => d.json.source.ingestion_mode !== 'discovery').length,\n}));\n\nif (dispatches.length === 0) {\n  return [{ json: { __no_candidates: true } }];\n}\nreturn dispatches;"
+        },
+        "id": "c6a01e5a-b8c9-4385-9b4e-b8a97dc17c8f",
+        "name": "Resolve and group items",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -240,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "version": 2
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.__no_candidates }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "notExists",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "b183fa12-e41a-4fc3-9257-2aa5eeb10f9d",
+        "name": "Has dispatches?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          -16,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// One health update per DISPATCHED GROUP, not per fetched discovery source —\n// last_discovery_success on the group's own row when it IS the discovery\n// pseudo-source, last_official_success on the matched row when a group\n// resolved to a real official source. A source with zero candidates this\n// run (no dispatch group at all) is left untouched rather than stamped with\n// a success it did not have — see docs/hybrid-discovery-architecture-\n// 2026-08-03.md for what is and is not wired up yet.\nconst now = new Date().toISOString();\nreturn $input.all().map((entry) => {\n  const g = entry.json;\n  const isDiscovery = g.source.ingestion_mode === 'discovery';\n  return { json: {\n    source_id: g.source.id,\n    last_discovery_success: isDiscovery ? now : g.source.last_discovery_success,\n    last_official_success: isDiscovery ? g.source.last_official_success : now,\n    updated_at: now,\n  }};\n});"
+        },
+        "id": "ed04e907-e857-4d13-bd23-1ac690e71255",
+        "name": "Build health update",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          16,
+          336
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "update",
+          "tableId": "sources",
+          "filters": {
+            "conditions": [
+              {
+                "keyName": "id",
+                "condition": "eq",
+                "keyValue": "={{ $json.source_id }}"
+              }
+            ]
+          },
+          "dataToSend": "autoMapInputData"
+        },
+        "id": "3efe4643-b8cf-42fb-8781-3e56cd2fbf33",
+        "name": "Update discovery health",
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          432,
+          336
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "10zDIxzQYFnJuOmh",
+            "name": "Supabase account 2"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "FHt8uKbBcixIWbWO",
+            "mode": "list",
+            "cachedResultUrl": "/workflow/FHt8uKbBcixIWbWO",
+            "cachedResultName": "02 — Source Ingestion"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {},
+            "matchingColumns": [],
+            "schema": [],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          },
+          "mode": "each"
+        },
+        "id": "12170f6d-652c-4e99-b6b8-56dc3aabba63",
+        "name": "Dispatch to ingestion",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.2,
+        "position": [
+          208,
+          336
+        ]
+      }
+    ],
+    "connections": {
+      "Every 2 hours": {
+        "main": [
+          [
+            {
+              "node": "Get discovery sources",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Get official sources",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get discovery sources": {
+        "main": [
+          [
+            {
+              "node": "Filter discovery sources",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter discovery sources": {
+        "main": [
+          [
+            {
+              "node": "Fetch discovery feed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch discovery feed": {
+        "main": [
+          [
+            {
+              "node": "Parse discovery feed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse discovery feed": {
+        "main": [
+          [
+            {
+              "node": "Merge for resolution",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get official sources": {
+        "main": [
+          [
+            {
+              "node": "Merge for resolution",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Merge for resolution": {
+        "main": [
+          [
+            {
+              "node": "Resolve and group items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Resolve and group items": {
+        "main": [
+          [
+            {
+              "node": "Has dispatches?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has dispatches?": {
+        "main": [
+          [
+            {
+              "node": "Build health update",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Dispatch to ingestion",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Build health update": {
+        "main": [
+          [
+            {
+              "node": "Update discovery health",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Asayel Qaid",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-08-03T11:45:44.953Z",
+        "id": 456,
+        "workflowId": "vCGP6RoEAhiG9LS5",
+        "versionId": "6a55c5b3-8277-4fea-aae4-b878aba53c72",
+        "event": "activated",
+        "userId": "c6441430-2935-43cb-a7bd-db0da8ae18ce"
+      },
+      {
+        "createdAt": "2026-08-03T11:46:11.677Z",
+        "id": 457,
+        "workflowId": "vCGP6RoEAhiG9LS5",
+        "versionId": "6a55c5b3-8277-4fea-aae4-b878aba53c72",
+        "event": "activated",
+        "userId": "c6441430-2935-43cb-a7bd-db0da8ae18ce"
+      }
+    ]
+  }
+}

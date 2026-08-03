@@ -186,7 +186,7 @@ declare bad text; n int; begin
   if bad is not null then raise exception 'active but unverified: %', bad; end if;
 
   select count(*) into n from public.sources where active;
-  raise notice 'PASS — % active sources (expected 0 until verification)', n;
+  raise notice 'PASS — % active sources, none of them pending/unverified', n;
 end $$;
 
 \echo '── S12. the constraint actually blocks activating a pending source ─────'
@@ -380,16 +380,31 @@ declare a uuid; b uuid; begin
     parser_type='unknown', parser_config='{}'::jsonb where id in (a, b);
 end $$;
 
-\echo '── S21. no source is active (nothing verified yet) ─────────────────────'
+\echo '── S21. no OFFICIAL source is active (nothing verified yet) ────────────'
+/*
+ * Unchanged in spirit from M7.5: no per-site parser may be marked verified
+ * on a guessed selector. What changed in M13 (hybrid discovery) is that the
+ * discovery MECHANISM itself — not any individual government website — was
+ * verified live (docs/hybrid-discovery-architecture-2026-08-03.md) and is
+ * seeded pre-verified, exactly six rows, one per GCC country, all
+ * ingestion_mode='discovery'. Everything with ingestion_mode='official'
+ * (the 52-source registry) must still be exactly as untouched as before.
+ */
 do $$
 declare n int; begin
-  select count(*) into n from public.sources where active;
-  if n <> 0 then raise exception '% sources are active before egress verification', n; end if;
+  select count(*) into n from public.sources where active and ingestion_mode <> 'discovery';
+  if n <> 0 then raise exception '% non-discovery sources are active before egress verification', n; end if;
 
-  select count(*) into n from public.sources where config_status='verified';
-  if n <> 0 then raise exception '% sources marked verified without an egress test', n; end if;
+  select count(*) into n from public.sources where config_status='verified' and ingestion_mode <> 'discovery';
+  if n <> 0 then raise exception '% non-discovery sources marked verified without an egress test', n; end if;
 
-  raise notice 'PASS — 0 active, 0 verified: nothing runs until M7.5 egress verification';
+  select count(*) into n from public.sources where ingestion_mode='discovery';
+  if n <> 6 then raise exception 'expected 6 discovery sources (one per GCC country), found %', n; end if;
+
+  select count(*) into n from public.sources where ingestion_mode='discovery' and (not active or config_status <> 'verified');
+  if n <> 0 then raise exception '% discovery sources are not verified+active', n; end if;
+
+  raise notice 'PASS — 0 official sources active/verified; 6 discovery sources verified+active';
 end $$;
 
 \echo ''

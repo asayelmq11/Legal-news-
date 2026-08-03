@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/auth/session'
 import { listSources } from '@/lib/admin/queries'
 import { COUNTRIES } from '@/lib/constants/countries'
 import { SOURCE_STATUS_META, deriveSourceStatus } from '@/lib/sources/status'
+import { INGESTION_MODE_LABELS_AR } from '@/lib/constants/taxonomy'
 import { formatDateAr } from '@/lib/utils'
 
 const PARSER_TYPE_LABELS_AR: Record<string, string> = {
@@ -104,6 +105,9 @@ export default async function SourcesPage({
                   <span className="font-medium text-(--color-ink)">{s.authority_ar}</span>
                   <Badge tone="brand">{COUNTRIES[s.country].nameAr}</Badge>
                   <Badge tone={meta.tone}>{meta.labelAr}</Badge>
+                  {s.ingestion_mode !== 'official' ? (
+                    <Badge tone="neutral">{INGESTION_MODE_LABELS_AR[s.ingestion_mode]}</Badge>
+                  ) : null}
                   {s.requires_authority_check ? <Badge tone="warn">تحقق من هوية الجهة</Badge> : null}
                   {s.exclusion_group ? <Badge tone="warn">مجموعة استبعاد</Badge> : null}
                 </div>

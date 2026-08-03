@@ -185,7 +185,20 @@ export default async function UpdateDetailPage({
             <Meta label="النموذج" value={item.ai_model ?? '—'} />
             <Meta label="بصمة المحتوى" value={item.content_hash?.slice(0, 16) ?? '—'} mono />
             <Meta label="تاريخ الإدراج" value={formatDateAr(item.created_at)} />
+            <Meta
+              label="طريقة الرصد"
+              value={item.origin_type === 'discovery' ? 'اكتشاف' : 'رصد مباشر'}
+            />
+            {item.discovery_engine ? <Meta label="محرك الاكتشاف" value={item.discovery_engine} /> : null}
           </dl>
+          {item.canonical_url ? (
+            <p className="mt-2 text-xs text-(--color-ink-subtle)">
+              رابط رسمي مُستنتَج:{' '}
+              <span className="font-mono" dir="ltr">
+                {item.canonical_url}
+              </span>
+            </p>
+          ) : null}
         </Section>
       ) : null}
     </article>

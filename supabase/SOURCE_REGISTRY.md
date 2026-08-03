@@ -1,6 +1,14 @@
 # Source registry — contents and activation procedure
 
-52 official sources across the six GCC states and two GCC-wide bodies.
+52 official sources across the six GCC states and two GCC-wide bodies, plus
+(M13) 6 discovery pseudo-sources — one per GCC country, `ingestion_mode =
+'discovery'`, `source_type = 'discovery_engine'` — that are not authorities
+themselves. Everything below describes the 52 OFFICIAL sources; see
+[`docs/hybrid-discovery-architecture-2026-08-03.md`](../docs/hybrid-discovery-architecture-2026-08-03.md)
+for the discovery layer, and `n8n/README.md` §6 for how the two interact.
+`ingestion_mode` (official/discovery/hybrid) is a different axis from
+`source_type` below — it classifies HOW a source is reached, not WHAT kind
+of authority it is.
 
 **Every source ships inactive and unverified.** Nothing will be crawled until a
 person opens the site, works out how to read it, and switches it on — from the

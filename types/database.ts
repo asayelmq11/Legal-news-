@@ -159,6 +159,9 @@ export type Database = {
           ai_model: string
           created_at: string
           search_vector: unknown | null
+          origin_type: Database['public']['Enums']['origin_type']
+          canonical_url: string | null
+          discovery_engine: string | null
         }
         Insert: {
           id?: string
@@ -181,6 +184,9 @@ export type Database = {
           document_path?: string | null
           ai_model: string
           created_at?: string
+          origin_type?: Database['public']['Enums']['origin_type']
+          canonical_url?: string | null
+          discovery_engine?: string | null
         }
         Update: {
           id?: string
@@ -203,10 +209,61 @@ export type Database = {
           document_path?: string | null
           ai_model?: string
           created_at?: string
+          origin_type?: Database['public']['Enums']['origin_type']
+          canonical_url?: string | null
+          discovery_engine?: string | null
         }
         Relationships: [
           {
             foreignKeyName: 'legal_updates_source_id_fkey'
+            columns: ['source_id']
+            isOneToOne: false
+            referencedRelation: 'sources'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      manual_run_dispatches: {
+        Row: {
+          correlation_id: string
+          scope: string
+          source_id: string | null
+          reason: string | null
+          accepted_sources: Json
+          skipped_sources: Json
+          requested_by: string | null
+          accepted_at: string
+        }
+        Insert: {
+          correlation_id: string
+          scope: string
+          source_id?: string | null
+          reason?: string | null
+          accepted_sources?: Json
+          skipped_sources?: Json
+          requested_by?: string | null
+          accepted_at?: string
+        }
+        Update: {
+          correlation_id?: string
+          scope?: string
+          source_id?: string | null
+          reason?: string | null
+          accepted_sources?: Json
+          skipped_sources?: Json
+          requested_by?: string | null
+          accepted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'manual_run_dispatches_requested_by_fkey'
+            columns: ['requested_by']
+            isOneToOne: false
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'manual_run_dispatches_source_id_fkey'
             columns: ['source_id']
             isOneToOne: false
             referencedRelation: 'sources'
@@ -390,6 +447,12 @@ export type Database = {
           last_alert_at: string | null
           health_score: number | null
           last_http_status: number | null
+          ingestion_mode: Database['public']['Enums']['ingestion_mode']
+          confidence: number | null
+          verification_method: string | null
+          last_discovery_success: string | null
+          last_official_success: string | null
+          last_parser_success: string | null
         }
         Insert: {
           id?: string
@@ -435,6 +498,12 @@ export type Database = {
           last_alert_at?: string | null
           health_score?: number | null
           last_http_status?: number | null
+          ingestion_mode?: Database['public']['Enums']['ingestion_mode']
+          confidence?: number | null
+          verification_method?: string | null
+          last_discovery_success?: string | null
+          last_official_success?: string | null
+          last_parser_success?: string | null
         }
         Update: {
           id?: string
@@ -480,6 +549,12 @@ export type Database = {
           last_alert_at?: string | null
           health_score?: number | null
           last_http_status?: number | null
+          ingestion_mode?: Database['public']['Enums']['ingestion_mode']
+          confidence?: number | null
+          verification_method?: string | null
+          last_discovery_success?: string | null
+          last_official_success?: string | null
+          last_parser_success?: string | null
         }
         Relationships: [
           {
@@ -544,6 +619,7 @@ export type Database = {
           triggered_by: string | null
           started_at: string
           finished_at: string | null
+          correlation_id: string | null
         }
         Insert: {
           id?: string
@@ -562,6 +638,7 @@ export type Database = {
           triggered_by?: string | null
           started_at?: string
           finished_at?: string | null
+          correlation_id?: string | null
         }
         Update: {
           id?: string
@@ -580,6 +657,7 @@ export type Database = {
           triggered_by?: string | null
           started_at?: string
           finished_at?: string | null
+          correlation_id?: string | null
         }
         Relationships: [
           {
@@ -613,12 +691,14 @@ export type Database = {
       dead_letter_state: 'open' | 'replayed' | 'dismissed' | 'resolved'
       document_type: 'law' | 'royal_decree' | 'ministerial_decision' | 'executive_regulation' | 'circular' | 'regulatory_framework' | 'official_notice' | 'court_precedent' | 'consultation_draft' | 'other'
       health_status: 'never_run' | 'healthy' | 'degraded' | 'failing' | 'stale' | 'disabled' | 'unverified'
+      ingestion_mode: 'official' | 'discovery' | 'hybrid'
       legal_category: 'tax' | 'customs' | 'employment' | 'corporate' | 'financial' | 'capital_markets' | 'banking' | 'data_privacy' | 'cybersecurity' | 'competition' | 'intellectual_property' | 'litigation' | 'licensing' | 'real_estate' | 'energy' | 'healthcare' | 'trade' | 'general'
       legal_status: 'enacted' | 'effective' | 'draft' | 'amended' | 'repealed' | 'pending'
       newsletter_status: 'sent' | 'failed' | 'skipped'
+      origin_type: 'official' | 'discovery'
       parser_type: 'rss' | 'html' | 'api' | 'pdf' | 'unknown'
-      run_status: 'success' | 'partial' | 'failed'
-      source_type: 'official_gazette' | 'government' | 'regulator' | 'approved_news' | 'gcc'
+      run_status: 'success' | 'partial' | 'failed' | 'empty'
+      source_type: 'official_gazette' | 'government' | 'regulator' | 'approved_news' | 'gcc' | 'discovery_engine'
       trigger_type: 'scheduled' | 'manual' | 'retry'
       user_role: 'admin' | 'viewer'
     }

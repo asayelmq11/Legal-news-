@@ -560,4 +560,166 @@ describe('n8n workflow exports', () => {
     const code = String(n?.parameters.jsCode ?? '')
     expect(code).toContain('correlation_id || null')
   })
+
+  /* ---------------------------------------------------------------------- */
+  /* Hybrid discovery layer (2026-08-03) — Workflow 05 and the Workflow 02/  */
+  /* 03 changes that let a discovered item share the official pipeline.      */
+  /* ---------------------------------------------------------------------- */
+
+  it('ships the discovery ingestion workflow', () => {
+    expect(files).toContain('06-discovery-ingestion.json')
+  })
+
+  it('Workflow 05 fetches Google News per GCC country and resolves candidates', () => {
+    const wf = loadFull('06-discovery-ingestion.json')
+    const names = wf.nodes.map((n) => n.name)
+    expect(names).toContain('Get discovery sources')
+    expect(names).toContain('Get official sources')
+    expect(names).toContain('Fetch discovery feed')
+    expect(names).toContain('Parse discovery feed')
+    expect(names).toContain('Resolve and group items')
+    expect(names).toContain('Dispatch to ingestion')
+  })
+
+  it('Workflow 05 does not re-embed ingestion, classification or the gate', () => {
+    // Same rule as Workflow 04: dispatch by Execute Workflow, never a second
+    // copy of the pipeline those workflows already own.
+    const wf = loadFull('06-discovery-ingestion.json')
+    const names = new Set(wf.nodes.map((n) => n.name))
+    for (const foreign of ['Parser router', 'Classify with AI', 'Apply the five rules', 'Insert into archive']) {
+      expect(names.has(foreign), `05 must not contain "${foreign}"`).toBe(false)
+    }
+  })
+
+  it('Workflow 05 dispatches into the real Workflow 02, one execution per resolved source', () => {
+    const wf = loadFull('06-discovery-ingestion.json')
+    const dispatch = wf.nodes.find((n) => n.name === 'Dispatch to ingestion')
+    expect(dispatch?.type).toBe('n8n-nodes-base.executeWorkflow')
+    const target = (dispatch?.parameters.workflowId as { value?: string } | undefined)?.value
+    expect(target).toBe('FHt8uKbBcixIWbWO')
+    expect(dispatch?.parameters.mode).toBe('each')
+  })
+
+  it('the discovery feed fetch preserves item order so results zip back to their source safely', () => {
+    // continueRegularOutput keeps one output item per input item, in order —
+    // continueErrorOutput would shift a later discovery source's result into
+    // the wrong slot the moment an earlier fetch failed.
+    const wf = loadFull('06-discovery-ingestion.json')
+    const fetch = wf.nodes.find((n) => n.name === 'Fetch discovery feed')
+    expect(fetch?.onError).toBe('continueRegularOutput')
+  })
+
+  it('discovery candidates are resolved against a real official-source registry, never invented', () => {
+    const wf = loadFull('06-discovery-ingestion.json')
+    const n = wf.nodes.find((x) => x.name === 'Resolve and group items')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain('domain_match')
+    expect(code).toContain('authority_name_match')
+    // the weak signal must be gated, not treated the same as a domain match
+    expect(code).toMatch(/confidence >= 60/)
+    // only a source the database would actually let publish may be credited
+    expect(code).toContain("ingestion_mode !== 'discovery'")
+    expect(code).toContain("config_status === 'verified'")
+  })
+
+  it('"Get official sources" is wired into a REAL execution path, not just referenced by $()', () => {
+    // The exact failure mode already hit once in this project (docs/n8n-
+    // fixes-2026-08-02.md, incident #5): a node with no outgoing connection,
+    // read only via $('...') from elsewhere, can be skipped by n8n's
+    // execution planner. "Merge for resolution" gives it a real edge.
+    const wf = loadFull('06-discovery-ingestion.json')
+    expect(wf.connections['Get official sources']?.main[0]).toEqual([
+      { node: 'Merge for resolution', type: 'main', index: 1 },
+    ])
+  })
+
+  it('official and discovery source lookups are unfiltered getAll — filtering happens in code', () => {
+    // A multi-condition Supabase node filter proved unreliable in this n8n
+    // version: an AND of ingestion_mode=eq.discovery + active=eq.true
+    // returned every active source regardless of mode (caught live — Umm
+    // Al-Qura's and GSO's own feed items appeared mislabelled as discovery
+    // candidates). Fetch small tables whole and filter in memory instead,
+    // exactly like the scheduler and retry sweep already do.
+    const wf = loadFull('06-discovery-ingestion.json')
+    for (const name of ['Get discovery sources', 'Get official sources']) {
+      const n = wf.nodes.find((x) => x.name === name)
+      expect(n?.parameters.filters, `${name} must not rely on a Supabase multi-condition filter`).toBeUndefined()
+    }
+    const filterNode = wf.nodes.find((x) => x.name === 'Filter discovery sources')
+    const code = String(filterNode?.parameters.jsCode ?? '')
+    expect(code).toContain("ingestion_mode === 'discovery'")
+    expect(code).toContain('active === true')
+  })
+
+  it('discovery candidates are deduplicated within a run before dispatch', () => {
+    const wf = loadFull('06-discovery-ingestion.json')
+    const n = wf.nodes.find((x) => x.name === 'Resolve and group items')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain('seenTitles')
+  })
+
+  it('Google News <link> is never treated as a directly fetchable canonical URL', () => {
+    // Documented, verified limitation: these links resolve through a
+    // client-side JS shell with no server-side redirect target. The parser
+    // must key off <source url> instead of chasing <link>.
+    const wf = loadFull('06-discovery-ingestion.json')
+    const n = wf.nodes.find((x) => x.name === 'Parse discovery feed')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain('sourceTag')
+    expect(code).toContain('JS redirect shell')
+  })
+
+  it('Workflow 02 accepts prefetched discovery items without re-running the official parser lanes', () => {
+    const wf = loadFull('02-source-ingestion.json')
+    const names = wf.nodes.map((n) => n.name)
+    expect(names).toContain('Has prefetched items?')
+    expect(names).toContain('Unwrap prefetched items')
+
+    // "Called by scheduler" must route through the new IF FIRST — never
+    // fan out to both the discovery bypass AND Parser router in the same
+    // execution, which would refetch the resolved source's own feed twice.
+    expect(wf.connections['Called by scheduler']?.main[0]).toEqual([
+      { node: 'Has prefetched items?', type: 'main', index: 0 },
+    ])
+  })
+
+  it('Normalise RawItem bypasses the domain allow-list only for discovery-mode sources', () => {
+    const wf = loadFull('02-source-ingestion.json')
+    const n = wf.nodes.find((x) => x.name === 'Normalise RawItem')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain("src.ingestion_mode === 'discovery'")
+    expect(code).toContain('isDiscoverySource')
+    // the bypass must be conditional, never unconditional
+    expect(code).not.toContain('if (!allowed.includes(host))')
+  })
+
+  it('Normalise RawItem carries origin_type/canonical_url/discovery_engine through', () => {
+    const wf = loadFull('02-source-ingestion.json')
+    const n = wf.nodes.find((x) => x.name === 'Normalise RawItem')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain('origin_type: r.origin_type')
+    expect(code).toContain('canonical_url: r.canonical_url')
+    expect(code).toContain('discovery_engine: r.discovery_engine')
+  })
+
+  it('the Publishing Gate bypasses the domain check only for discovery-mode sources, and records origin', () => {
+    const wf = loadFull('03-publishing-gate.json')
+    const n = wf.nodes.find((x) => x.name === 'Apply the five rules')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain("source.ingestion_mode === 'discovery'")
+    expect(code).toContain('isDiscoverySource')
+    expect(code).toContain('origin_type: item.origin_type')
+    expect(code).toContain('canonical_url: item.canonical_url')
+    expect(code).toContain('discovery_engine: item.discovery_engine')
+  })
+
+  it('the Publishing Gate still enforces the other four rules for a discovery-origin item', () => {
+    // The bypass is narrowly for rule 2 (domain allow-list). Confidence,
+    // duplicate, legal-relevance and publication-date rules are untouched —
+    // this is what actually keeps discovery-origin noise out of the archive.
+    const raw = readFileSync(new URL('03-publishing-gate.json', DIR), 'utf8')
+    for (const reason of ['low_confidence', 'not_legal_update', 'duplicate', 'no_publication_date']) {
+      expect(raw).toContain(reason)
+    }
+  })
 })

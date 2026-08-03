@@ -10,6 +10,7 @@ export const SOURCE_TYPES = [
   'regulator',
   'approved_news',
   'gcc',
+  'discovery_engine',
 ] as const
 export type SourceType = (typeof SOURCE_TYPES)[number]
 
@@ -84,7 +85,7 @@ export const HEALTH_STATUSES = [
 ] as const
 export type HealthStatus = (typeof HEALTH_STATUSES)[number]
 
-export const RUN_STATUSES = ['success', 'partial', 'failed'] as const
+export const RUN_STATUSES = ['success', 'partial', 'failed', 'empty'] as const
 export type RunStatus = (typeof RUN_STATUSES)[number]
 
 export const TRIGGER_TYPES = ['scheduled', 'manual', 'retry'] as const
@@ -92,6 +93,17 @@ export type TriggerType = (typeof TRIGGER_TYPES)[number]
 
 export const USER_ROLES = ['admin', 'viewer'] as const
 export type UserRole = (typeof USER_ROLES)[number]
+
+/**
+ * How a source is REACHED — orthogonal to `SourceType`, which classifies
+ * what kind of authority it is. `official` (default, unchanged for the
+ * 52-source registry) crawls the source's own parser lane directly;
+ * `discovery` is a discovery engine (Google News today) that is not an
+ * authority itself; `hybrid` is an official source also supplemented by a
+ * scoped discovery feed. See docs/hybrid-discovery-architecture-2026-08-03.md.
+ */
+export const INGESTION_MODES = ['official', 'discovery', 'hybrid'] as const
+export type IngestionMode = (typeof INGESTION_MODES)[number]
 
 /* -------------------------------------------------------------------------- */
 /* Arabic labels — the interface language of the platform.                     */
@@ -103,6 +115,13 @@ export const SOURCE_TYPE_LABELS_AR: Readonly<Record<SourceType, string>> = {
   regulator: 'جهة تنظيمية',
   approved_news: 'مصدر إخباري معتمد',
   gcc: 'مجلس التعاون الخليجي',
+  discovery_engine: 'محرك اكتشاف',
+}
+
+export const INGESTION_MODE_LABELS_AR: Readonly<Record<IngestionMode, string>> = {
+  official: 'رصد مباشر',
+  discovery: 'اكتشاف',
+  hybrid: 'مختلط (رصد مباشر + اكتشاف)',
 }
 
 export const DOCUMENT_TYPE_LABELS_AR: Readonly<Record<DocumentType, string>> = {
