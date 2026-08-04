@@ -1,10 +1,9 @@
 {
-  "updatedAt": "2026-08-03T11:46:11.608Z",
+  "updatedAt": "2026-08-04T13:34:54.106Z",
   "createdAt": "2026-08-03T11:23:07.947Z",
   "id": "vCGP6RoEAhiG9LS5",
   "name": "05 — Discovery Ingestion",
   "description": null,
-  "active": true,
   "nodes": [
     {
       "parameters": {

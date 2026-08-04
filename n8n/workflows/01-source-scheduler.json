@@ -1,10 +1,9 @@
 {
-  "updatedAt": "2026-08-02T07:38:42.437Z",
+  "updatedAt": "2026-08-04T13:34:36.052Z",
   "createdAt": "2026-08-01T16:47:05.894Z",
   "id": "9tBYdFdqdE76gQuQ",
   "name": "01 — Source Scheduler",
   "description": null,
-  "active": true,
   "nodes": [
     {
       "parameters": {

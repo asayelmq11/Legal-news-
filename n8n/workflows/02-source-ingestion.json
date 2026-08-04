@@ -1,10 +1,9 @@
 {
-  "updatedAt": "2026-08-04T11:59:58.455Z",
+  "updatedAt": "2026-08-04T13:43:43.738Z",
   "createdAt": "2026-08-01T16:46:39.922Z",
   "id": "FHt8uKbBcixIWbWO",
   "name": "02 — Source Ingestion",
   "description": null,
-  "active": true,
   "nodes": [
     {
       "parameters": {},
@@ -353,7 +352,7 @@
         "jsonHeaders": "={{ JSON.stringify({ \"content-type\": \"application/json\" }) }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ messages: [{ role: 'system', content: $json.system_prompt }, { role: 'user', content: `الجهة: ${$json.source.authority_ar}\\nالدولة المسجّلة للمصدر: ${$json.source.country}\\nالرابط: ${$json.source_url}\\nتاريخ النشر المستخرج من المصدر: ${$json.publication_date || 'غير متوفر'}\\n\\nالعنوان:\\n${$json.title_raw}\\n\\nالنص:\\n${$json.content_raw}` }], temperature: 0, response_format: { type: 'json_object' } }) }}",
+        "jsonBody": "={{ JSON.stringify({ messages: [{ role: 'system', content: $json.system_prompt }, { role: 'user', content: `الجهة: ${$json.source.authority_ar}\\nالدولة المسجّلة للمصدر: ${$json.source.country}\\nالرابط: ${$json.source_url}\\nتاريخ النشر المستخرج من المصدر: ${$json.publication_date || 'غير متوفر'}\\n\\nالعنوان:\\n${$json.title_raw}\\n\\nالنص:\\n${$json.content_raw}` }], response_format: { type: 'json_object' } }) }}",
         "options": {
           "timeout": 60000,
           "response": {
@@ -381,8 +380,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "AZURE_OPENAI_CREDENTIAL_ID",
-          "name": "Azure OpenAI account"
+          "id": "ugjJj94h0d6VTNr5",
+          "name": "Azure OpenAI account — Legal Intelligence"
         }
       },
       "onError": "continueRegularOutput",

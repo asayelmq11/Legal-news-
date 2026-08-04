@@ -87,9 +87,11 @@ national site).
 credential (see `n8n/README.md` §2). Swap the deployment there to change the
 model; nothing in this file depends on which one is behind it.
 
-**Temperature 0, `response_format: json_object`.** Same input should classify
-the same way run to run, and the API enforces valid JSON rather than the
-workflow having to recover from prose wrapped around it.
+**`response_format: json_object`.** The API enforces valid JSON rather than
+the workflow having to recover from prose wrapped around it. No `temperature`
+override — the configured deployment (`gpt-5.2-chat-2`) only accepts the
+default value and returns 400 `unsupported_value` for anything else,
+confirmed against the live endpoint.
 
 **No confidence-based rejection.** The only classification-time rejection is
 `is_legal_update = false` — "only reject obvious non-legal news," never a

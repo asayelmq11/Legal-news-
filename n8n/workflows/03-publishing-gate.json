@@ -1,10 +1,9 @@
 {
-  "updatedAt": "2026-08-03T11:16:05.666Z",
+  "updatedAt": "2026-08-04T13:47:56.230Z",
   "createdAt": "2026-08-01T16:46:22.092Z",
   "id": "2AmFW6QzgNwSxaOU",
   "name": "03 — Publishing Gate",
   "description": null,
-  "active": true,
   "nodes": [
     {
       "parameters": {},
@@ -204,6 +203,19 @@
       "typeVersion": 1,
       "id": "a6eac944-4d68-4ff4-8036-4c8006cd8255",
       "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 'Passed?' passes through {published, row} from 'Apply the publishing\n// rules'. autoMapInputData on the next node maps top-level keys straight\n// to columns, so it needs the row's fields at the top level, not nested\n// under 'row' -- that mismatch previously failed every insert with\n// \"Could not find the 'published' column of 'legal_updates'\".\nreturn [{ json: $input.first().json.row }];"
+      },
+      "id": "f4a1a2b3-6d7e-4c8f-9a0b-1c2d3e4f5a6b",
+      "name": "Flatten row for insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -440,
+        80
+      ]
     }
   ],
   "connections": {
@@ -244,7 +256,7 @@
       "main": [
         [
           {
-            "node": "Insert into archive",
+            "node": "Flatten row for insert",
             "type": "main",
             "index": 0
           }
@@ -281,6 +293,17 @@
         [
           {
             "node": "Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flatten row for insert": {
+      "main": [
+        [
+          {
+            "node": "Insert into archive",
             "type": "main",
             "index": 0
           }
