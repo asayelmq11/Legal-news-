@@ -59,8 +59,8 @@ export interface ArchiveItem {
   summary_ar: string
   country: Enums<'country_code'>
   category: Enums<'legal_category'>
-  document_type: Enums<'document_type'>
-  legal_status: Enums<'legal_status'>
+  document_type: Enums<'document_type'> | null
+  legal_status: Enums<'legal_status'> | null
   publication_date: string
   effective_date: string | null
   affected_entities: string[]
@@ -69,7 +69,7 @@ export interface ArchiveItem {
   created_at: string
   sources: SourceRef | null
   /** Present only when the reader is an admin. */
-  confidence?: number
+  confidence?: number | null
   ai_model?: string
   content_hash?: string
   origin_type?: Enums<'origin_type'>
@@ -101,35 +101,15 @@ function applyFilters<T extends {
   eq: (col: string, val: string) => T
   gte: (col: string, val: string | number) => T
   lte: (col: string, val: string | number) => T
-  overlaps: (col: string, vals: readonly string[]) => T
-  not: (col: string, op: string, val: null) => T
 }>(query: T, f: ArchiveFilters): T {
   let q = query
 
   if (f.country.length) q = q.in('country', f.country)
   if (f.category.length) q = q.in('category', f.category)
-  if (f.documentType.length) q = q.in('document_type', f.documentType)
-  if (f.legalStatus.length) q = q.in('legal_status', f.legalStatus)
   if (f.source) q = q.eq('source_id', f.source)
-
-  // Array containment — served by the GIN indexes on these columns.
-  if (f.entity.length) q = q.overlaps('affected_entities', f.entity)
-  if (f.keyword.length) q = q.overlaps('keywords', f.keyword)
 
   if (f.publishedFrom) q = q.gte('publication_date', f.publishedFrom)
   if (f.publishedTo) q = q.lte('publication_date', f.publishedTo)
-
-  if (f.effectiveFrom || f.effectiveTo) {
-    // Rows with no effective date can never satisfy an effective-date range,
-    // and excluding them explicitly lets the planner use the partial index.
-    q = q.not('effective_date', 'is', null)
-    if (f.effectiveFrom) q = q.gte('effective_date', f.effectiveFrom)
-    if (f.effectiveTo) q = q.lte('effective_date', f.effectiveTo)
-  }
-
-  // Parsed to undefined for non-admins upstream, so this is unreachable for them.
-  if (f.confidenceMin !== undefined) q = q.gte('confidence', f.confidenceMin)
-  if (f.confidenceMax !== undefined) q = q.lte('confidence', f.confidenceMax)
 
   return q
 }

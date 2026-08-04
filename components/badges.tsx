@@ -49,7 +49,8 @@ export function CategoryBadge({ category }: { category: LegalCategory }) {
   return <Badge>{LEGAL_CATEGORY_LABELS_AR[category]}</Badge>
 }
 
-export function DocumentTypeBadge({ documentType }: { documentType: DocumentType }) {
+export function DocumentTypeBadge({ documentType }: { documentType: DocumentType | null }) {
+  if (!documentType) return null
   return <Badge>{DOCUMENT_TYPE_LABELS_AR[documentType]}</Badge>
 }
 
@@ -68,6 +69,7 @@ const LEGAL_STATUS_TONE: Record<LegalStatus, Tone> = {
   repealed: 'danger',
 }
 
-export function LegalStatusBadge({ status }: { status: LegalStatus }) {
+export function LegalStatusBadge({ status }: { status: LegalStatus | null }) {
+  if (!status) return null
   return <Badge tone={LEGAL_STATUS_TONE[status]}>{LEGAL_STATUS_LABELS_AR[status]}</Badge>
 }

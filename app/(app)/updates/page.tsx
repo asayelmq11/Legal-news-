@@ -26,7 +26,7 @@ export default async function UpdatesPage({
   const user = await requireActiveUser()
   const raw = await searchParams
   const isAdmin = user.role === 'admin'
-  const filters = parseArchiveFilters(raw, { isAdmin })
+  const filters = parseArchiveFilters(raw)
 
   return (
     <div className="space-y-6">
@@ -40,7 +40,7 @@ export default async function UpdatesPage({
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <aside>
           <Suspense fallback={<FilterSkeleton />}>
-            <FilterPanel isAdmin={isAdmin} />
+            <FilterPanel />
           </Suspense>
         </aside>
 
@@ -59,9 +59,9 @@ export default async function UpdatesPage({
   )
 }
 
-async function FilterPanel({ isAdmin }: { isAdmin: boolean }) {
+async function FilterPanel() {
   const sources = await listFilterSources()
-  return <ArchiveFilterPanel sources={sources} isAdmin={isAdmin} />
+  return <ArchiveFilterPanel sources={sources} />
 }
 
 async function Results({
@@ -123,7 +123,7 @@ async function Results({
             <ul className="space-y-3">
               {group.items.map((item) => (
                 <li key={item.id}>
-                  <UpdateCard item={item} showConfidence={isAdmin} />
+                  <UpdateCard item={item} />
                 </li>
               ))}
             </ul>

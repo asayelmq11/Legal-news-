@@ -1,39 +1,45 @@
 # n8n — workflows and setup
 
 n8n is the only orchestrator. It schedules, crawls, parses, classifies, decides
-what publishes, retries, and notifies. The database stores state; the web app
-reads it.
+what publishes, and handles manual runs. The database stores state; the web
+app reads it.
 
 ```
 workflows/
-  01-source-scheduler.json      hourly dispatcher — picks due sources     (M8)
-  02-source-ingestion.json      four parser lanes → normalised RawItem    (M8)
-  03-publishing-gate.json       the five publish rules + archive insert    (M9)
-  04-retry-health-manual        backoff, health snapshot, "Run now"       (M10)
-  06-discovery-ingestion.json   Google News → resolve → same pipeline     (M13)
-  05-weekly-newsletter          digest + newsletter_history — not built    (M11)
+  01-source-scheduler.json      hourly dispatcher — picks due sources
+  02-source-ingestion.json      four parser lanes → normalise → Azure AI classify
+  03-publishing-gate.json       the publishing rules + archive insert
+  04-manual-run.json            webhook → run 02 for the requested scope
+  05-discovery-ingestion.json   Google News → resolve → same pipeline
 ```
 
-**M13 — hybrid discovery.** The 52-source registry proved that a dedicated
-parser per authority does not scale (see
-`docs/source-provisioning-2026-08-02.md`): most GCC portals sit behind a WAF,
-run a legacy stack with no feed, or are unreachable from n8n's egress. `06 —
-Discovery Ingestion` adds a second way to find a legal update — a discovery
-engine (Google News today) that is explicitly NOT a publishing source —
-without adding a second pipeline. It resolves each candidate against the
-official-source registry where possible, then dispatches into the SAME
-`02 — Source Ingestion` → `03 — Publishing Gate` chain every other source
-uses. Full design and live verification:
-[`docs/hybrid-discovery-architecture-2026-08-03.md`](../docs/hybrid-discovery-architecture-2026-08-03.md).
+Architecturally this is three workflows:
+
+- **Workflow 1 — ingestion.** `01` (scheduler) and `05` (discovery) both
+  dispatch into `02` (fetch → normalise → classify) which calls `03`
+  (publish). Four files because n8n sub-workflows are how retries, discovery,
+  and the manual trigger all reuse the same pipeline without a second copy of
+  its rules — not four independent pipelines.
+- **Workflow 2 — manual run.** `04`: a webhook that resolves a scope (one
+  source / a country / everything) to a source set and runs Workflow 1 for
+  them. Nothing else — no idempotency ledger, no lock, no dead-letter queue.
+- **Workflow 3 — retry.** Not a separate file. Every HTTP node that calls an
+  external service (the four fetch lanes, the AI classification call) has
+  n8n's native `retryOnFail` set directly on the node — 3 attempts with a wait
+  between them, isolated per node so one dead source or a transient AI 5xx
+  doesn't fail the whole run. See §4 for the exact settings. A standalone
+  scheduled retry-sweep workflow would have nothing to read from: the
+  dead-letter table and the source-level retry columns it used to sweep were
+  both removed as part of the simplification.
 
 ---
 
 ## 1. Prerequisites
 
-**Egress verification (M7.5) must be done first.** No source can be activated
-until a real fetch has succeeded from the production n8n address — GCC
-government portals return `403` to datacentre IPs, so a workflow that works on a
-laptop can fail entirely in service.
+**Egress verification must be done first.** No source can be activated until
+a real fetch has succeeded from the production n8n address — GCC government
+portals return `403` to datacentre IPs, so a workflow that works on a laptop
+can fail entirely in service.
 
 ```bash
 node scripts/verify-egress.mjs "postgresql://…"  > /tmp/egress.md
@@ -46,29 +52,36 @@ valid outcome and must not be worked around.
 
 ## 2. Credentials
 
-One credential, created in n8n → Credentials:
+Two credentials, created in n8n → Credentials. Never in this repository,
+never in `.env.local`, never in `app_settings`.
 
 | Type | Name | Value |
 |---|---|---|
 | Supabase API | `Supabase (service_role)` | Host = your project URL, Service Role Secret = the `service_role` key |
-| Header Auth | `Anthropic API` | Name = `x-api-key`, Value = your Anthropic API key |
+| Header Auth | `Azure OpenAI account` | Name = `api-key`, Value = your Azure OpenAI resource key |
 
 The `service_role` key bypasses RLS and is the **only** write path into the
-archive. It belongs here and nowhere else — never in `.env.local`, never in
-`app_settings`, never in this repository.
+archive.
 
-The workflow exports reference the credential by name; a test asserts no key is
+The `Azure OpenAI account` credential's key is sent as the `api-key` header on
+every call to `Classify with AI` in `02 — Source Ingestion`. The node's URL
+already carries the endpoint, deployment name, and API version — only the key
+itself lives in the credential.
+
+The workflow exports reference credentials by name; a test asserts no key is
 ever inlined into the JSON.
 
 ## 3. Import
 
-n8n → Workflows → Import from File, one file at a time, in order. Then open
-`01 — Source Scheduler` and re-point the **Run ingestion** node at the imported
-`02 — Source Ingestion` (n8n stores workflow references by internal id, which
-differs per instance).
+n8n → Workflows → Import from File, one file at a time, in order (01 → 02 →
+03 → 04 → 05). Then open `01 — Source Scheduler`, `04 — Manual Run`, and
+`05 — Discovery Ingestion` and re-point their **Execute Workflow** nodes at
+the imported `02 — Source Ingestion` and `03 — Publishing Gate` (n8n stores
+workflow references by internal id, which differs per instance).
 
-Activate `01 — Source Scheduler` only. `02` is a sub-workflow and is invoked by
-the scheduler, not by a trigger of its own.
+Activate `01 — Source Scheduler`, `04 — Manual Run`, and
+`05 — Discovery Ingestion`. `02` and `03` are sub-workflows, invoked by the
+others — never triggered directly.
 
 ## 4. How ingestion works
 
@@ -89,10 +102,8 @@ lanes:
 
 Every lane also reads `allow_insecure_tls` (boolean, default false) — an opt-in
 per source, not a default. Some legitimate government certificates fail
-n8n's own CA bundle (stale/incomplete) even though they are valid, unexpired
-and correctly chained when checked against a real trusted store (confirmed
-independently for several sources during the 2026-08-03 provisioning pass —
-see `docs/source-provisioning-2026-08-02.md`). Set this only after
+n8n's own CA bundle even though they are valid, unexpired and correctly
+chained when checked against a real trusted store. Set this only after
 independently verifying the certificate, never to silence an unverified
 warning.
 
@@ -110,111 +121,100 @@ All four converge on one normaliser producing the shared `RawItem`:
 }
 ```
 
-Because everything downstream consumes `RawItem`, adding a fifth parser later
-means adding one lane and nothing else.
+**Failure isolation and retry (Workflow 3, in practice).** Every fetch lane
+HTTP node has `retryOnFail: true, maxTries: 3, waitBetweenTries: 2000` and
+`onError: continueErrorOutput` — one unreachable source retries three times
+then fails in isolation, never stopping the others in the same tick. The
+`Classify with AI` node carries the same pattern (`maxTries: 3,
+waitBetweenTries: 5000`).
 
-**Two things the normaliser enforces:** an item with no URL or no title is
-dropped, and an item whose hostname is not in the source's `allowed_domains` is
-rejected before any AI call. The Publishing Gate checks the domain again in M9 —
-this is the cheap check that avoids paying for an item that could never publish.
+## 5. Classification and publishing
 
-**Failure isolation.** Every HTTP node retries three times (2s → 4s → 8s) and
-routes its error to a separate branch, so one unreachable source cannot stop the
-others in the same tick.
+After normalisation each `RawItem` goes to Azure OpenAI's Chat Completions API
+with the system prompt in
+[`../prompts/classify-legal-update.md`](../prompts/classify-legal-update.md)
+(temperature 0, `response_format: json_object`). The response is
+**validated field by field**: `is_legal_update` must be boolean, `title` and
+`summary` non-empty, `country`/`category` in their enums. Anything malformed
+or incomplete is rejected as `ai_parse_failure` or `ai_invalid_output` — never
+coerced.
 
-## 5. Classification and publishing (M9)
-
-After normalisation each `RawItem` goes to the Messages API with the system
-prompt in [`../prompts/classify-legal-update.md`](../prompts/classify-legal-update.md)
-(`claude-sonnet-5`, temperature 0). The response is parsed and **validated field
-by field**: every constrained value must be in its enum, dates must be real ISO
-dates, confidence must be a number in 0..1. Anything malformed or incomplete is
-rejected as `ai_parse_failure` or `ai_invalid_output` — never coerced. A coerced
-category would put a confident wrong classification in a legal archive.
+There is **no confidence threshold**. The classifier does not return a
+confidence score at all; the only classification-time rejection is
+`is_legal_update === false` — "only reject obvious non-legal news."
 
 `content_hash` is then computed as SHA256 of
-`source_id | source_url | title | publication_date` (Crypto node, hex — matching
-the `^[a-f0-9]{64}$` CHECK).
+`source_id | source_url | title | publication_date` (Crypto node, hex —
+matching the `^[a-f0-9]{64}$` CHECK).
 
-**`03 — Publishing Gate`** is the only code that decides what enters the archive.
-Scheduled ingestion calls it, and so will manual runs (M10), so the rules cannot
-drift between callers. It applies, in order:
+**`03 — Publishing Gate`** is the only code that decides what enters the
+archive. Scheduled ingestion, discovery, and manual runs all call it, so the
+rules cannot drift between callers. What's left, now that the AI decision and
+the confidence gate are both upstream, is structural:
 
-| # | Rule | Rejection reason |
-|---|---|---|
-| 0 | the confidence threshold itself is present and sane | `missing_confidence_threshold` |
-| 1 | source exists, is `active` and `verified` — **re-read at publish time** | `inactive_source` · `unverified_source` |
-| 2 | item hostname is in the source's `allowed_domains` — **skipped for a discovery-mode source** (§6) | `domain_mismatch` |
-| 3 | `content_hash` not already present | `duplicate` |
-| 4 | `confidence >= ai.confidence_threshold` | `low_confidence` |
-| 5 | `is_legal_update === true` | `not_legal_update` |
+| Rule | Rejection reason |
+|---|---|
+| source exists, is `active` and `verified` — **re-read at publish time** | `inactive_source` · `unverified_source` |
+| item hostname is in the source's `allowed_domains` — **skipped for a discovery-mode source** (§6) | `domain_mismatch` |
+| `content_hash` not already present | `duplicate` |
+| a publication date exists (crawler-supplied — never fabricated from fetch time) | `no_publication_date` |
 
-Rule 0 exists because `ai.confidence_threshold` is a **fail-closed** setting: if
-it is missing or malformed the gate rejects *everything* rather than assuming a
-value, since assuming one could quietly widen what publishes.
+Rule 1 re-reads the source rather than trusting the crawl payload — an admin
+may have deactivated or un-verified it while the item was in flight.
 
-Rule 1 re-reads the source rather than trusting the crawl payload — an admin may
-have deactivated or un-verified it while the item was in flight.
+A unique-violation on insert is classified as `duplicate`, not a failure: that
+is the concurrent-execution race the constraint exists for.
 
-A unique-violation on insert is classified as `duplicate`, not a failure: that is
-the concurrent-execution race the constraint exists for, and counting it as an
-error would make a healthy source look broken.
-
-**Logging.** One `workflow_logs` row per source per run, with counts and a
-`rejection_reasons` tally. Rejections are counted, not logged individually — a
-rejection is a normal decision, not an incident.
-
-## 6. Hybrid discovery (M13)
+## 6. Hybrid discovery
 
 `sources.ingestion_mode` is `official` (default, unchanged for all 52
 registry sources), `discovery`, or `hybrid`. It is a different axis from
 `source_type` (which classifies the AUTHORITY — gazette/government/regulator/
-gcc/approved_news) — a discovery pseudo-source's `source_type` is the new
+gcc/approved_news) — a discovery pseudo-source's `source_type` is the
 `discovery_engine` value, orthogonal to how it is reached.
 
-**`06 — Discovery Ingestion`** runs every 2 hours:
+**`05 — Discovery Ingestion`** runs every 2 hours:
 
 1. Fetches each active `ingestion_mode = 'discovery'` source's `feed_url` —
-   today, one Google News RSS query per GCC country (see
-   `lib/discovery/discovery.ts` for the exact phrases and the tested spec
-   this node mirrors).
+   one Google News RSS query per GCC country.
 2. Parses each `<item>`, keying off the `<source url="…">` attribute — NOT
    `<link>`, which is a client-side JS redirect shell with no server-side
-   resolution target (confirmed empirically; see
-   `docs/hybrid-discovery-architecture-2026-08-03.md`).
+   resolution target.
 3. Deduplicates within the run by normalised title, then resolves each
-   candidate against every active + verified **non-discovery** source:
-   a `domain_match` (the resolved domain is a real official's own
-   `allowed_domains`) or a strong `authority_name_match` (confidence ≥ 60 —
-   see `resolveDiscoveredItem`) promotes the item to `origin_type = official`
-   with that source's own id; anything weaker keeps `origin_type =
-   'discovery'` and is attributed to the discovery pseudo-source itself.
+   candidate against every active + verified **non-discovery** source: a
+   `domain_match` or a strong `authority_name_match` (confidence ≥ 60)
+   promotes the item to `origin_type = official` with that source's own id;
+   anything weaker keeps `origin_type = 'discovery'`.
 4. Groups resolved candidates by target source and dispatches each group into
-   `02 — Source Ingestion` exactly like the scheduler does — via a new
+   `02 — Source Ingestion` exactly like the scheduler does — via a
    `prefetched_items` bypass (`Has prefetched items?` → `Unwrap prefetched
-   items` → `Normalise RawItem`) that skips the four fetch lanes entirely,
-   since Workflow 05 already fetched and resolved the items.
+   items` → `Normalise RawItem`) that skips the four fetch lanes entirely.
 
 **The domain allow-list is bypassed only for `ingestion_mode = 'discovery'`**
 — in `Normalise RawItem` AND independently re-checked in the Publishing
-Gate's `Apply the five rules` (both re-derive `isDiscoverySource` from the
-re-read source row, never trust a flag carried on the item). Every other
-rule — confidence threshold, duplicate hash, `is_legal_update`, publication
-date — applies identically. A discovery-origin item that is not legally
-relevant is rejected exactly like an official one; the discovery layer only
-ever widens WHERE something is looked for, never what gets published.
+Gate (both re-derive `isDiscoverySource` from the re-read source row, never
+trust a flag carried on the item). Every other rule — duplicate hash,
+`is_legal_update`, publication date — applies identically.
 
 `legal_updates.origin_type` (`official`/`discovery`), `canonical_url`, and
-`discovery_engine` record, per item, how it was actually found — a `hybrid`
-source can have some items officially crawled and others discovered in the
-same run.
+`discovery_engine` record, per item, how it was actually found.
 
-**Known limitation, not silently worked around:** Bing News requires a paid
-Azure Cognitive Services subscription key not available in this environment.
-Documented, not faked — see the architecture doc for what a real
-implementation would need.
+## 7. Manual run
 
-## 7. What is not here yet
+**`04 — Manual Run`** is a webhook (`POST /webhook/legal-ingestion-run`,
+header-auth protected by `N8N_TRIGGER_SECRET`) that:
 
-M11 adds the newsletter. The scheduler already respects `next_retry_at`, so
-M10 slots in without changing it.
+1. Validates the request body — `scope` is one of `source` / `country` /
+   `all` / `url`, with the scope-specific field required.
+2. Resolves the scope to a source set, filtered to what the scheduler would
+   run anyway (`active`, `config_status = 'verified'`, a real parser type).
+3. Dispatches Workflow 1 (`02 — Source Ingestion`) once per resolved source,
+   without waiting for it to finish (`waitForSubWorkflow: false`), and
+   answers immediately.
+4. Responds with `202 accepted` / `404 rejected` (unknown source) /
+   `200 skipped` (nothing matched) / `500 failed` (dispatch itself couldn't
+   start).
+
+There is no idempotency ledger for a retried request and no source lock —
+both existed only to support the operational admin UI this platform no longer
+has. A manual run is a plain, stateless dispatch.

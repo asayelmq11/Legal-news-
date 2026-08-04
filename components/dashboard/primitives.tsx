@@ -101,45 +101,6 @@ export function BarList({
   )
 }
 
-/** Sparkline-style monthly column chart, again in plain CSS. */
-export function MonthlyBars({
-  items,
-  emptyLabel = 'لا توجد بيانات بعد',
-}: {
-  items: ReadonlyArray<{ month: string; count: number }>
-  emptyLabel?: string
-}) {
-  const total = items.reduce((sum, i) => sum + i.count, 0)
-  if (total === 0) {
-    return <p className="text-sm text-(--color-ink-subtle)">{emptyLabel}</p>
-  }
-
-  const max = Math.max(...items.map((i) => i.count), 1)
-  const monthLabel = new Intl.DateTimeFormat('ar', { month: 'short', timeZone: 'UTC' })
-
-  return (
-    <ol className="flex items-end justify-between gap-1" style={{ blockSize: '8rem' }}>
-      {items.map((item) => {
-        const heightPct = Math.max(2, Math.round((item.count / max) * 100))
-        const label = monthLabel.format(new Date(`${item.month}T00:00:00Z`))
-        return (
-          <li key={item.month} className="flex flex-1 flex-col items-center justify-end gap-1">
-            <span className="text-xs tabular-nums text-(--color-ink-subtle)">
-              {item.count > 0 ? item.count : ''}
-            </span>
-            <div
-              className="w-full rounded-t bg-(--color-brand)"
-              style={{ blockSize: `${heightPct}%` }}
-              title={`${label}: ${item.count}`}
-            />
-            <span className="text-[0.65rem] text-(--color-ink-subtle)">{label}</span>
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
-
 export function ErrorCard({ title, error }: { title: string; error: string }) {
   return (
     <div

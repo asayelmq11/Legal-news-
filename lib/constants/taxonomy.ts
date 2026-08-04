@@ -68,29 +68,6 @@ export const LEGAL_STATUSES = [
 ] as const
 export type LegalStatus = (typeof LEGAL_STATUSES)[number]
 
-/**
- * Mirrors the health_status enum, extended in migration 0014 with the M10
- * classifications. 'disabled' and 'unverified' describe a source nobody is
- * checking; 'stale' one that is checked but has gone quiet for longer than its
- * configured silence window.
- */
-export const HEALTH_STATUSES = [
-  'never_run',
-  'healthy',
-  'degraded',
-  'failing',
-  'stale',
-  'disabled',
-  'unverified',
-] as const
-export type HealthStatus = (typeof HEALTH_STATUSES)[number]
-
-export const RUN_STATUSES = ['success', 'partial', 'failed', 'empty'] as const
-export type RunStatus = (typeof RUN_STATUSES)[number]
-
-export const TRIGGER_TYPES = ['scheduled', 'manual', 'retry'] as const
-export type TriggerType = (typeof TRIGGER_TYPES)[number]
-
 export const USER_ROLES = ['admin', 'viewer'] as const
 export type UserRole = (typeof USER_ROLES)[number]
 
@@ -165,16 +142,6 @@ export const LEGAL_STATUS_LABELS_AR: Readonly<Record<LegalStatus, string>> = {
   amended: 'مُعدَّل',
   repealed: 'مُلغى',
   pending: 'قيد النفاذ',
-}
-
-export const HEALTH_STATUS_LABELS_AR: Readonly<Record<HealthStatus, string>> = {
-  never_run: 'لم يُشغَّل بعد',
-  healthy: 'سليم',
-  degraded: 'متدهور',
-  failing: 'متعطل',
-  stale: 'صامت',
-  disabled: 'موقوف',
-  unverified: 'غير متحقَّق منه',
 }
 
 export const USER_ROLE_LABELS_AR: Readonly<Record<UserRole, string>> = {

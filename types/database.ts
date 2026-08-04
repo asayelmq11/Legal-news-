@@ -52,90 +52,6 @@ export type Database = {
           },
         ]
       }
-      job_dead_letters: {
-        Row: {
-          id: string
-          source_id: string | null
-          stage: Database['public']['Enums']['dead_letter_stage']
-          item_url: string | null
-          content_hash: string | null
-          error_code: string
-          error_message: string | null
-          attempt_number: number
-          max_attempts: number
-          first_attempt_at: string | null
-          last_attempt_at: string | null
-          workflow_execution_id: string | null
-          payload: Json
-          state: Database['public']['Enums']['dead_letter_state']
-          replay_count: number
-          last_replay_at: string | null
-          resolution_note: string | null
-          resolved_at: string | null
-          resolved_by: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          source_id?: string | null
-          stage?: Database['public']['Enums']['dead_letter_stage']
-          item_url?: string | null
-          content_hash?: string | null
-          error_code: string
-          error_message?: string | null
-          attempt_number?: number
-          max_attempts?: number
-          first_attempt_at?: string | null
-          last_attempt_at?: string | null
-          workflow_execution_id?: string | null
-          payload?: Json
-          state?: Database['public']['Enums']['dead_letter_state']
-          replay_count?: number
-          last_replay_at?: string | null
-          resolution_note?: string | null
-          resolved_at?: string | null
-          resolved_by?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          source_id?: string | null
-          stage?: Database['public']['Enums']['dead_letter_stage']
-          item_url?: string | null
-          content_hash?: string | null
-          error_code?: string
-          error_message?: string | null
-          attempt_number?: number
-          max_attempts?: number
-          first_attempt_at?: string | null
-          last_attempt_at?: string | null
-          workflow_execution_id?: string | null
-          payload?: Json
-          state?: Database['public']['Enums']['dead_letter_state']
-          replay_count?: number
-          last_replay_at?: string | null
-          resolution_note?: string | null
-          resolved_at?: string | null
-          resolved_by?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'job_dead_letters_resolved_by_fkey'
-            columns: ['resolved_by']
-            isOneToOne: false
-            referencedRelation: 'users'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'job_dead_letters_source_id_fkey'
-            columns: ['source_id']
-            isOneToOne: false
-            referencedRelation: 'sources'
-            referencedColumns: ['id']
-          },
-        ]
-      }
       legal_updates: {
         Row: {
           id: string
@@ -146,10 +62,10 @@ export type Database = {
           summary_ar: string
           country: Database['public']['Enums']['country_code']
           category: Database['public']['Enums']['legal_category']
-          document_type: Database['public']['Enums']['document_type']
-          legal_status: Database['public']['Enums']['legal_status']
+          document_type: Database['public']['Enums']['document_type'] | null
+          legal_status: Database['public']['Enums']['legal_status'] | null
           is_legal_update: boolean
-          confidence: number
+          confidence: number | null
           effective_date: string | null
           publication_date: string
           affected_entities: string[]
@@ -172,10 +88,10 @@ export type Database = {
           summary_ar: string
           country: Database['public']['Enums']['country_code']
           category: Database['public']['Enums']['legal_category']
-          document_type: Database['public']['Enums']['document_type']
-          legal_status: Database['public']['Enums']['legal_status']
+          document_type?: Database['public']['Enums']['document_type'] | null
+          legal_status?: Database['public']['Enums']['legal_status'] | null
           is_legal_update: boolean
-          confidence: number
+          confidence?: number | null
           effective_date?: string | null
           publication_date: string
           affected_entities?: string[]
@@ -197,10 +113,10 @@ export type Database = {
           summary_ar?: string
           country?: Database['public']['Enums']['country_code']
           category?: Database['public']['Enums']['legal_category']
-          document_type?: Database['public']['Enums']['document_type']
-          legal_status?: Database['public']['Enums']['legal_status']
+          document_type?: Database['public']['Enums']['document_type'] | null
+          legal_status?: Database['public']['Enums']['legal_status'] | null
           is_legal_update?: boolean
-          confidence?: number
+          confidence?: number | null
           effective_date?: string | null
           publication_date?: string
           affected_entities?: string[]
@@ -216,185 +132,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: 'legal_updates_source_id_fkey'
-            columns: ['source_id']
-            isOneToOne: false
-            referencedRelation: 'sources'
-            referencedColumns: ['id']
-          },
-        ]
-      }
-      manual_run_dispatches: {
-        Row: {
-          correlation_id: string
-          scope: string
-          source_id: string | null
-          reason: string | null
-          accepted_sources: Json
-          skipped_sources: Json
-          requested_by: string | null
-          accepted_at: string
-        }
-        Insert: {
-          correlation_id: string
-          scope: string
-          source_id?: string | null
-          reason?: string | null
-          accepted_sources?: Json
-          skipped_sources?: Json
-          requested_by?: string | null
-          accepted_at?: string
-        }
-        Update: {
-          correlation_id?: string
-          scope?: string
-          source_id?: string | null
-          reason?: string | null
-          accepted_sources?: Json
-          skipped_sources?: Json
-          requested_by?: string | null
-          accepted_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'manual_run_dispatches_requested_by_fkey'
-            columns: ['requested_by']
-            isOneToOne: false
-            referencedRelation: 'users'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'manual_run_dispatches_source_id_fkey'
-            columns: ['source_id']
-            isOneToOne: false
-            referencedRelation: 'sources'
-            referencedColumns: ['id']
-          },
-        ]
-      }
-      newsletter_history: {
-        Row: {
-          id: string
-          period_start: string
-          period_end: string
-          subject: string
-          recipients: string[]
-          recipient_count: number
-          update_ids: string[]
-          html_body: string | null
-          status: Database['public']['Enums']['newsletter_status']
-          error_message: string | null
-          sent_at: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          period_start: string
-          period_end: string
-          subject: string
-          recipients?: string[]
-          recipient_count?: number
-          update_ids?: string[]
-          html_body?: string | null
-          status: Database['public']['Enums']['newsletter_status']
-          error_message?: string | null
-          sent_at?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          period_start?: string
-          period_end?: string
-          subject?: string
-          recipients?: string[]
-          recipient_count?: number
-          update_ids?: string[]
-          html_body?: string | null
-          status?: Database['public']['Enums']['newsletter_status']
-          error_message?: string | null
-          sent_at?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
-      source_health_snapshots: {
-        Row: {
-          id: string
-          source_id: string
-          taken_at: string
-          classification: Database['public']['Enums']['health_status']
-          health_score: number
-          enabled: boolean
-          verified: boolean
-          stale: boolean
-          last_checked_at: string | null
-          last_success_at: string | null
-          last_item_found_at: string | null
-          consecutive_failures: number
-          dead_job_count: number
-          window_runs: number
-          fetch_success_rate: number | null
-          extraction_success_rate: number | null
-          ai_success_rate: number | null
-          gate_acceptance_rate: number | null
-          duplicate_rate: number | null
-          avg_response_ms: number | null
-          last_http_status: number | null
-          last_error_code: string | null
-          last_error_message: string | null
-        }
-        Insert: {
-          id?: string
-          source_id: string
-          taken_at?: string
-          classification: Database['public']['Enums']['health_status']
-          health_score: number
-          enabled: boolean
-          verified: boolean
-          stale: boolean
-          last_checked_at?: string | null
-          last_success_at?: string | null
-          last_item_found_at?: string | null
-          consecutive_failures?: number
-          dead_job_count?: number
-          window_runs?: number
-          fetch_success_rate?: number | null
-          extraction_success_rate?: number | null
-          ai_success_rate?: number | null
-          gate_acceptance_rate?: number | null
-          duplicate_rate?: number | null
-          avg_response_ms?: number | null
-          last_http_status?: number | null
-          last_error_code?: string | null
-          last_error_message?: string | null
-        }
-        Update: {
-          id?: string
-          source_id?: string
-          taken_at?: string
-          classification?: Database['public']['Enums']['health_status']
-          health_score?: number
-          enabled?: boolean
-          verified?: boolean
-          stale?: boolean
-          last_checked_at?: string | null
-          last_success_at?: string | null
-          last_item_found_at?: string | null
-          consecutive_failures?: number
-          dead_job_count?: number
-          window_runs?: number
-          fetch_success_rate?: number | null
-          extraction_success_rate?: number | null
-          ai_success_rate?: number | null
-          gate_acceptance_rate?: number | null
-          duplicate_rate?: number | null
-          avg_response_ms?: number | null
-          last_http_status?: number | null
-          last_error_code?: string | null
-          last_error_message?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'source_health_snapshots_source_id_fkey'
             columns: ['source_id']
             isOneToOne: false
             referencedRelation: 'sources'
@@ -418,18 +155,9 @@ export type Database = {
           priority: number
           poll_interval_minutes: number | null
           next_run_at: string | null
-          health_status: Database['public']['Enums']['health_status']
-          last_run_at: string | null
           last_success_at: string | null
           last_failure_at: string | null
           last_failure_reason: string | null
-          last_duration_ms: number | null
-          last_items_fetched: number
-          last_items_published: number
-          last_items_rejected: number
-          consecutive_failures: number
-          retry_attempt: number
-          next_retry_at: string | null
           notes: string | null
           created_at: string
           updated_at: string
@@ -437,16 +165,6 @@ export type Database = {
           exclusion_group: string | null
           requires_authority_check: boolean
           updated_by: string | null
-          lock_owner: string | null
-          lock_acquired_at: string | null
-          lock_expires_at: string | null
-          first_attempt_at: string | null
-          last_error_code: string | null
-          max_silence_minutes: number | null
-          last_alert_kind: string | null
-          last_alert_at: string | null
-          health_score: number | null
-          last_http_status: number | null
           ingestion_mode: Database['public']['Enums']['ingestion_mode']
           confidence: number | null
           verification_method: string | null
@@ -469,18 +187,9 @@ export type Database = {
           priority: number
           poll_interval_minutes?: number | null
           next_run_at?: string | null
-          health_status?: Database['public']['Enums']['health_status']
-          last_run_at?: string | null
           last_success_at?: string | null
           last_failure_at?: string | null
           last_failure_reason?: string | null
-          last_duration_ms?: number | null
-          last_items_fetched?: number
-          last_items_published?: number
-          last_items_rejected?: number
-          consecutive_failures?: number
-          retry_attempt?: number
-          next_retry_at?: string | null
           notes?: string | null
           created_at?: string
           updated_at?: string
@@ -488,16 +197,6 @@ export type Database = {
           exclusion_group?: string | null
           requires_authority_check?: boolean
           updated_by?: string | null
-          lock_owner?: string | null
-          lock_acquired_at?: string | null
-          lock_expires_at?: string | null
-          first_attempt_at?: string | null
-          last_error_code?: string | null
-          max_silence_minutes?: number | null
-          last_alert_kind?: string | null
-          last_alert_at?: string | null
-          health_score?: number | null
-          last_http_status?: number | null
           ingestion_mode?: Database['public']['Enums']['ingestion_mode']
           confidence?: number | null
           verification_method?: string | null
@@ -520,18 +219,9 @@ export type Database = {
           priority?: number
           poll_interval_minutes?: number | null
           next_run_at?: string | null
-          health_status?: Database['public']['Enums']['health_status']
-          last_run_at?: string | null
           last_success_at?: string | null
           last_failure_at?: string | null
           last_failure_reason?: string | null
-          last_duration_ms?: number | null
-          last_items_fetched?: number
-          last_items_published?: number
-          last_items_rejected?: number
-          consecutive_failures?: number
-          retry_attempt?: number
-          next_retry_at?: string | null
           notes?: string | null
           created_at?: string
           updated_at?: string
@@ -539,16 +229,6 @@ export type Database = {
           exclusion_group?: string | null
           requires_authority_check?: boolean
           updated_by?: string | null
-          lock_owner?: string | null
-          lock_acquired_at?: string | null
-          lock_expires_at?: string | null
-          first_attempt_at?: string | null
-          last_error_code?: string | null
-          max_silence_minutes?: number | null
-          last_alert_kind?: string | null
-          last_alert_at?: string | null
-          health_score?: number | null
-          last_http_status?: number | null
           ingestion_mode?: Database['public']['Enums']['ingestion_mode']
           confidence?: number | null
           verification_method?: string | null
@@ -601,81 +281,6 @@ export type Database = {
           },
         ]
       }
-      workflow_logs: {
-        Row: {
-          id: string
-          workflow_name: string
-          execution_id: string | null
-          source_id: string | null
-          trigger_type: Database['public']['Enums']['trigger_type']
-          status: Database['public']['Enums']['run_status']
-          items_fetched: number
-          items_published: number
-          items_rejected: number
-          rejection_reasons: Json
-          error_message: string | null
-          duration_ms: number | null
-          retry_attempt: number
-          triggered_by: string | null
-          started_at: string
-          finished_at: string | null
-          correlation_id: string | null
-        }
-        Insert: {
-          id?: string
-          workflow_name: string
-          execution_id?: string | null
-          source_id?: string | null
-          trigger_type: Database['public']['Enums']['trigger_type']
-          status: Database['public']['Enums']['run_status']
-          items_fetched?: number
-          items_published?: number
-          items_rejected?: number
-          rejection_reasons?: Json
-          error_message?: string | null
-          duration_ms?: number | null
-          retry_attempt?: number
-          triggered_by?: string | null
-          started_at?: string
-          finished_at?: string | null
-          correlation_id?: string | null
-        }
-        Update: {
-          id?: string
-          workflow_name?: string
-          execution_id?: string | null
-          source_id?: string | null
-          trigger_type?: Database['public']['Enums']['trigger_type']
-          status?: Database['public']['Enums']['run_status']
-          items_fetched?: number
-          items_published?: number
-          items_rejected?: number
-          rejection_reasons?: Json
-          error_message?: string | null
-          duration_ms?: number | null
-          retry_attempt?: number
-          triggered_by?: string | null
-          started_at?: string
-          finished_at?: string | null
-          correlation_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'workflow_logs_source_id_fkey'
-            columns: ['source_id']
-            isOneToOne: false
-            referencedRelation: 'sources'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'workflow_logs_triggered_by_fkey'
-            columns: ['triggered_by']
-            isOneToOne: false
-            referencedRelation: 'users'
-            referencedColumns: ['id']
-          },
-        ]
-      }
     }
     Views: Record<string, never>
     Functions: {
@@ -687,19 +292,13 @@ export type Database = {
     Enums: {
       config_status: 'pending_verification' | 'verified' | 'blocked_by_access' | 'requires_subscription'
       country_code: 'SA' | 'AE' | 'KW' | 'QA' | 'BH' | 'OM' | 'GCC'
-      dead_letter_stage: 'fetch' | 'extract' | 'ai_classify' | 'hash' | 'publish' | 'unknown'
-      dead_letter_state: 'open' | 'replayed' | 'dismissed' | 'resolved'
       document_type: 'law' | 'royal_decree' | 'ministerial_decision' | 'executive_regulation' | 'circular' | 'regulatory_framework' | 'official_notice' | 'court_precedent' | 'consultation_draft' | 'other'
-      health_status: 'never_run' | 'healthy' | 'degraded' | 'failing' | 'stale' | 'disabled' | 'unverified'
       ingestion_mode: 'official' | 'discovery' | 'hybrid'
       legal_category: 'tax' | 'customs' | 'employment' | 'corporate' | 'financial' | 'capital_markets' | 'banking' | 'data_privacy' | 'cybersecurity' | 'competition' | 'intellectual_property' | 'litigation' | 'licensing' | 'real_estate' | 'energy' | 'healthcare' | 'trade' | 'general'
       legal_status: 'enacted' | 'effective' | 'draft' | 'amended' | 'repealed' | 'pending'
-      newsletter_status: 'sent' | 'failed' | 'skipped'
       origin_type: 'official' | 'discovery'
       parser_type: 'rss' | 'html' | 'api' | 'pdf' | 'unknown'
-      run_status: 'success' | 'partial' | 'failed' | 'empty'
       source_type: 'official_gazette' | 'government' | 'regulator' | 'approved_news' | 'gcc' | 'discovery_engine'
-      trigger_type: 'scheduled' | 'manual' | 'retry'
       user_role: 'admin' | 'viewer'
     }
     CompositeTypes: Record<string, never>

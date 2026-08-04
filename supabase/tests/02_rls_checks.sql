@@ -125,32 +125,6 @@ declare src uuid; begin
   end;
 end $$;
 
-\echo '── R6. workflow_logs and newsletter_history are equally sealed ─────────'
-do $$
-begin
-  set local role authenticated;
-  set local request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000001';
-  begin
-    insert into public.workflow_logs (workflow_name, trigger_type, status)
-    values ('forged','manual','success');
-    reset role;
-    raise exception 'SEAL BREACH: admin wrote workflow_logs';
-  exception when insufficient_privilege or check_violation then
-    reset role; raise notice 'PASS — workflow_logs INSERT denied';
-  end;
-
-  set local role authenticated;
-  set local request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000001';
-  begin
-    insert into public.newsletter_history (period_start, period_end, subject, status)
-    values (current_date, current_date, 'forged', 'sent');
-    reset role;
-    raise exception 'SEAL BREACH: admin wrote newsletter_history';
-  exception when insufficient_privilege or check_violation then
-    reset role; raise notice 'PASS — newsletter_history INSERT denied';
-  end;
-end $$;
-
 \echo '── R7. viewer cannot manage sources; admin can ─────────────────────────'
 do $$
 declare n int; begin
@@ -210,21 +184,21 @@ do $$
 declare n int; v jsonb; who uuid; begin
   set local role authenticated;
   set local request.jwt.claim.sub = 'bbbbbbbb-0000-0000-0000-000000000002';
-  update public.app_settings set value='0.10'::jsonb where key='ai.confidence_threshold';
+  update public.app_settings set value='"Asia/Dubai"'::jsonb where key='app.timezone';
   get diagnostics n = row_count;
   reset role;
-  if n <> 0 then raise exception 'viewer changed the confidence threshold'; end if;
+  if n <> 0 then raise exception 'viewer changed the timezone setting'; end if;
   raise notice 'PASS — viewer UPDATE on app_settings affected 0 rows';
 
   set local role authenticated;
   set local request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000001';
   update public.app_settings
-     set value='0.95'::jsonb, updated_at=now(), updated_by=auth.uid()
-   where key='ai.confidence_threshold';
+     set value='"Asia/Dubai"'::jsonb, updated_at=now(), updated_by=auth.uid()
+   where key='app.timezone';
   reset role;
 
-  select value, updated_by into v, who from public.app_settings where key='ai.confidence_threshold';
-  if v::numeric <> 0.95 then raise exception 'admin update did not apply'; end if;
+  select value, updated_by into v, who from public.app_settings where key='app.timezone';
+  if v::text <> '"Asia/Dubai"' then raise exception 'admin update did not apply'; end if;
   if who <> 'aaaaaaaa-0000-0000-0000-000000000001' then
     raise exception 'updated_by not recorded';
   end if;
@@ -302,27 +276,15 @@ declare src uuid; n int; begin
     summary_ar, country, category, document_type, legal_status, is_legal_update,
     confidence, publication_date, raw_excerpt, ai_model)
   values (src, repeat('1',64), 'https://fixture.invalid/n8n','عنوان من n8n','ملخص','SA',
-          'tax','circular','enacted', true, 0.96, current_date, 'نص', 'claude');
-
-  insert into public.workflow_logs (workflow_name, trigger_type, status, source_id,
-    items_fetched, items_published, items_rejected, rejection_reasons)
-  values ('source-crawler','scheduled','success', src, 10, 3, 7,
-          '{"duplicate":5,"low_confidence":2}'::jsonb);
-
-  insert into public.newsletter_history (period_start, period_end, subject, status,
-    recipients, recipient_count, sent_at)
-  values (current_date - 7, current_date, 'التحديثات القانونية الأسبوعية','sent',
-          array['legal@internal'], 1, now());
+          'tax','circular','enacted', true, 0.96, current_date, 'نص', 'azure-openai');
 
   update public.sources
-     set health_status='healthy', last_success_at=now(), last_run_at=now(),
-         last_items_fetched=10, last_items_published=3, last_items_rejected=7,
-         consecutive_failures=0, retry_attempt=0, next_run_at=now()+interval '1 hour'
+     set last_success_at=now(), next_run_at=now()+interval '1 hour'
    where id = src;
 
   select count(*) into n from public.legal_updates;
   reset role;
-  raise notice 'PASS — service_role wrote archive, logs, newsletter and health (% updates total)', n;
+  raise notice 'PASS — service_role wrote the archive and updated source state (% updates total)', n;
 end $$;
 
 \echo '── R15. the search path is not hijackable ──────────────────────────────'

@@ -8,9 +8,9 @@ import { requireAdmin } from '@/lib/auth/session'
 import { getSource } from '@/lib/admin/queries'
 import { verificationBlockers } from '@/lib/admin/source-schema'
 import { COUNTRIES } from '@/lib/constants/countries'
-import { HEALTH_STATUS_LABELS_AR, INGESTION_MODE_LABELS_AR } from '@/lib/constants/taxonomy'
+import { INGESTION_MODE_LABELS_AR } from '@/lib/constants/taxonomy'
 import { SOURCE_STATUS_META, deriveSourceStatus } from '@/lib/sources/status'
-import { formatDateAr, formatDurationAr } from '@/lib/utils'
+import { formatDateAr } from '@/lib/utils'
 
 export const metadata = { title: 'تفاصيل المصدر' }
 
@@ -44,9 +44,6 @@ export default async function SourceDetailPage({
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="brand">{COUNTRIES[source.country].nameAr}</Badge>
           <Badge tone={meta.tone}>{meta.labelAr}</Badge>
-          <Badge tone={source.health_status === 'failing' ? 'danger' : 'neutral'}>
-            {HEALTH_STATUS_LABELS_AR[source.health_status]}
-          </Badge>
         </div>
         <h1 className="text-2xl font-bold text-(--color-ink)">{source.authority_ar}</h1>
         <p className="text-sm text-(--color-ink-muted)">{meta.descriptionAr}</p>
@@ -100,14 +97,10 @@ export default async function SourceDetailPage({
       ) : null}
 
       <section className="rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-5">
-        <h2 className="mb-4 text-sm font-semibold text-(--color-ink)">صحة المصدر</h2>
+        <h2 className="mb-4 text-sm font-semibold text-(--color-ink)">آخر تشغيل</h2>
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
-          <Row label="آخر تشغيل" value={formatDateAr(source.last_run_at)} />
           <Row label="آخر نجاح" value={formatDateAr(source.last_success_at)} />
           <Row label="آخر إخفاق" value={formatDateAr(source.last_failure_at)} />
-          <Row label="إخفاقات متتالية" value={String(source.consecutive_failures)} />
-          <Row label="مدة آخر تشغيل" value={formatDurationAr(source.last_duration_ms)} />
-          <Row label="جُلب / نُشر / رُفض" value={`${source.last_items_fetched} / ${source.last_items_published} / ${source.last_items_rejected}`} />
         </dl>
         {source.last_failure_reason ? (
           <p className="mt-3 font-mono text-xs text-(--color-ink-subtle)" dir="ltr">

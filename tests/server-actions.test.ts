@@ -116,8 +116,7 @@ const serverActionModules = ROOTS.flatMap(sourceFiles)
 describe("'use server' modules export async functions only", () => {
   it('finds the action modules to check', () => {
     // A discovery bug would make every assertion below vacuously pass.
-    expect(serverActionModules.length).toBeGreaterThanOrEqual(3)
-    expect(serverActionModules.map((m) => m.path)).toContain(join('lib', 'ops', 'actions.ts'))
+    expect(serverActionModules.length).toBeGreaterThanOrEqual(2)
     expect(serverActionModules.map((m) => m.path)).toContain(join('lib', 'admin', 'actions.ts'))
     expect(serverActionModules.map((m) => m.path)).toContain(join('lib', 'auth', 'actions.ts'))
   })
@@ -145,14 +144,14 @@ describe('the detector actually detects', () => {
     return ts.createSourceFile('probe.ts', code, ts.ScriptTarget.Latest, true)
   }
 
-  it('flags the exact defect that crashed the Ops page', () => {
+  it('flags a non-async export sitting beside a valid action', () => {
     const offenders = offendingExports(
       parse(`'use server'
-export const OPS_IDLE = { ok: false, message: null }
-export async function triggerManualRun() {}`),
+export const IDLE = { ok: false, message: null }
+export async function doThing() {}`),
     )
 
-    expect(offenders).toEqual(['const/let OPS_IDLE'])
+    expect(offenders).toEqual(['const/let IDLE'])
   })
 
   it('flags a non-async exported function', () => {

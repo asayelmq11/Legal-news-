@@ -33,7 +33,7 @@ describe('public path allow-list', () => {
   })
 
   it('protects every application route', () => {
-    for (const path of ['/', '/updates', '/updates/abc', '/sources', '/users', '/settings', '/ops']) {
+    for (const path of ['/', '/updates', '/updates/abc', '/sources', '/users', '/settings']) {
       expect(isPublicPath(path)).toBe(false)
     }
   })
@@ -72,11 +72,10 @@ describe('role guard', () => {
 describe('role-aware navigation', () => {
   it('hides admin sections from a viewer', () => {
     const hrefs = navItemsFor('viewer').map((i) => i.href)
-    expect(hrefs).toEqual(['/', '/updates', '/newsletters'])
+    expect(hrefs).toEqual(['/', '/updates'])
     expect(hrefs).not.toContain('/sources')
     expect(hrefs).not.toContain('/users')
     expect(hrefs).not.toContain('/settings')
-    expect(hrefs).not.toContain('/ops')
   })
 
   it('shows every section to an admin', () => {
@@ -178,29 +177,5 @@ describe('server environment', () => {
     }
     const { getServerEnv } = await import('@/lib/env')
     expect(getServerEnv().NEXT_PUBLIC_SUPABASE_URL).toBe('https://x.supabase.co')
-  })
-
-  it('reports the manual trigger as unconfigured when the secret is absent', async () => {
-    process.env = {
-      ...ORIGINAL,
-      NEXT_PUBLIC_SUPABASE_URL: 'https://x.supabase.co',
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key',
-    }
-    delete process.env.N8N_TRIGGER_WEBHOOK_URL
-    delete process.env.N8N_TRIGGER_SECRET
-    const { isManualTriggerConfigured } = await import('@/lib/env')
-    expect(isManualTriggerConfigured()).toBe(false)
-  })
-
-  it('rejects a trigger secret that is too short to be meaningful', async () => {
-    process.env = {
-      ...ORIGINAL,
-      NEXT_PUBLIC_SUPABASE_URL: 'https://x.supabase.co',
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key',
-      N8N_TRIGGER_WEBHOOK_URL: 'https://n8n.internal/webhook/x',
-      N8N_TRIGGER_SECRET: 'short',
-    }
-    const { getServerEnv } = await import('@/lib/env')
-    expect(() => getServerEnv()).toThrow(/N8N_TRIGGER_SECRET/)
   })
 })

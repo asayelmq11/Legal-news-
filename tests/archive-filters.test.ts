@@ -10,11 +10,8 @@ import {
   type RawSearchParams,
 } from '@/lib/updates/filters'
 
-const asViewer = { isAdmin: false }
-const asAdmin = { isAdmin: true }
-
-function parse(raw: RawSearchParams, opts = asViewer) {
-  return parseArchiveFilters(raw, opts)
+function parse(raw: RawSearchParams) {
+  return parseArchiveFilters(raw)
 }
 
 describe('enum filters', () => {
@@ -27,7 +24,6 @@ describe('enum filters', () => {
     // A stale bookmark should show the archive, not an error page.
     expect(parse({ country: 'SA,ZZ,XX' }).country).toEqual(['SA'])
     expect(parse({ category: 'nonsense' }).category).toEqual([])
-    expect(parse({ legalStatus: 'effective,bogus' }).legalStatus).toEqual(['effective'])
   })
 
   it('de-duplicates', () => {
@@ -36,7 +32,7 @@ describe('enum filters', () => {
 
   it('ignores injection-shaped values instead of passing them on', () => {
     expect(parse({ country: "SA';drop table legal_updates;--" }).country).toEqual([])
-    expect(parse({ documentType: '*' }).documentType).toEqual([])
+    expect(parse({ category: '*' }).category).toEqual([])
   })
 })
 
@@ -76,58 +72,6 @@ describe('date ranges', () => {
     const f = parse({ publishedFrom: '2026-12-31', publishedTo: '2026-01-01' })
     expect(f.publishedFrom).toBe('2026-01-01')
     expect(f.publishedTo).toBe('2026-12-31')
-  })
-
-  it('handles the effective-date range independently', () => {
-    const f = parse({ effectiveFrom: '2026-06-01', effectiveTo: '2026-03-01' })
-    expect(f.effectiveFrom).toBe('2026-03-01')
-    expect(f.effectiveTo).toBe('2026-06-01')
-  })
-})
-
-describe('confidence filter — admin only', () => {
-  it('is parsed for an admin', () => {
-    const f = parse({ confidenceMin: '0.5', confidenceMax: '0.95' }, asAdmin)
-    expect(f.confidenceMin).toBe(0.5)
-    expect(f.confidenceMax).toBe(0.95)
-  })
-
-  it('is DISCARDED for a viewer even when present in the URL', () => {
-    // A viewer hand-editing the URL must not gain an administrative filter.
-    const f = parse({ confidenceMin: '0.1', confidenceMax: '0.9' }, asViewer)
-    expect(f.confidenceMin).toBeUndefined()
-    expect(f.confidenceMax).toBeUndefined()
-  })
-
-  it('rejects values outside the unit interval', () => {
-    expect(parse({ confidenceMin: '-1' }, asAdmin).confidenceMin).toBeUndefined()
-    expect(parse({ confidenceMin: '1.5' }, asAdmin).confidenceMin).toBeUndefined()
-    expect(parse({ confidenceMin: 'abc' }, asAdmin).confidenceMin).toBeUndefined()
-  })
-
-  it('swaps an inverted confidence range', () => {
-    const f = parse({ confidenceMin: '0.9', confidenceMax: '0.5' }, asAdmin)
-    expect(f.confidenceMin).toBe(0.5)
-    expect(f.confidenceMax).toBe(0.9)
-  })
-})
-
-describe('free-text lists', () => {
-  it('splits, trims and de-duplicates', () => {
-    expect(parse({ keyword: 'ضريبة, ضريبة , زكاة' }).keyword).toEqual(['ضريبة', 'زكاة'])
-  })
-
-  it('caps the number of items', () => {
-    const many = Array.from({ length: 50 }, (_, i) => `k${i}`).join(',')
-    expect(parse({ keyword: many }).keyword).toHaveLength(10)
-  })
-
-  it('drops over-long items rather than truncating them', () => {
-    expect(parse({ entity: 'x'.repeat(500) }).entity).toEqual([])
-  })
-
-  it('drops empty segments', () => {
-    expect(parse({ keyword: 'a,,  ,b' }).keyword).toEqual(['a', 'b'])
   })
 })
 
@@ -191,7 +135,6 @@ describe('active-filter detection', () => {
   it('is true when anything narrows the archive', () => {
     expect(hasActiveFilters(parse({ q: 'ضريبة' }))).toBe(true)
     expect(hasActiveFilters(parse({ country: 'SA' }))).toBe(true)
-    expect(hasActiveFilters(parse({ keyword: 'زكاة' }))).toBe(true)
   })
 
   it('ignores pagination — page 2 is not a filter', () => {
@@ -227,11 +170,6 @@ describe('query string round-trip', () => {
     expect(buildArchiveQuery(f, { page: 4 })).toContain('page=4')
   })
 
-  it('never emits a confidence parameter for a viewer', () => {
-    const f = parse({ confidenceMin: '0.5' }, asViewer)
-    expect(buildArchiveQuery(f)).not.toContain('confidence')
-  })
-
   it('preserves multi-valued filters', () => {
     const f = parse({ country: 'SA,AE,KW' })
     const qs = buildArchiveQuery(f)
@@ -255,14 +193,11 @@ describe('malformed input never throws', () => {
       { q: [] },
       { country: [''] },
       { publishedFrom: '', publishedTo: '' },
-      { confidenceMin: 'NaN' },
       { pageSize: '1e10' },
       { source: '../../etc/passwd' },
-      { keyword: ',,,,' },
     ]
     for (const raw of junk) {
       expect(() => parse(raw)).not.toThrow()
-      expect(() => parse(raw, asAdmin)).not.toThrow()
     }
   })
 })

@@ -55,10 +55,6 @@ export function toSettingView(def: SettingDefinition): SettingView {
   return view
 }
 
-const emailList = z
-  .array(z.email({ error: 'عنوان بريد إلكتروني غير صالح' }))
-  .max(200, { error: 'الحد الأقصى 200 مستلم' })
-
 const priorityIntervals = z
   .object({
     '1': z.number().int().positive(),
@@ -70,27 +66,6 @@ const priorityIntervals = z
   .strict()
 
 export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
-  {
-    key: 'ai.confidence_threshold',
-    labelAr: 'الحد الأدنى لثقة التصنيف',
-    descriptionAr:
-      'أقل قيمة ثقة يقبلها بوابة النشر في n8n. لا تُطبَّق في قاعدة البيانات — القرار كله في سير العمل.',
-    control: 'number',
-    schema: z.number().min(0).max(1),
-    defaultValue: 0.9,
-    failClosed: true,
-    failClosedNoteAr:
-      'إعداد حسّاس: عند غيابه أو تلفه ترفض بوابة النشر كل العناصر بدلاً من افتراض قيمة قد توسّع ما يُنشر.',
-  },
-  {
-    key: 'ingestion.failure_alert_threshold',
-    labelAr: 'عدد الإخفاقات قبل التنبيه',
-    descriptionAr: 'عدد الإخفاقات المتتالية التي يصبح بعدها المصدر «متعطلاً» ويُرفع تنبيه.',
-    control: 'number',
-    schema: z.number().int().min(1).max(50),
-    defaultValue: 5,
-    failClosed: false,
-  },
   {
     key: 'ingestion.priority_intervals',
     labelAr: 'فترات الاستطلاع حسب الأولوية',
@@ -116,58 +91,9 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
     failClosed: false,
   },
   {
-    key: 'health.stale_after_minutes',
-    labelAr: 'مدة اعتبار المصدر قديماً',
-    descriptionAr: 'إذا لم ينجح المصدر خلال هذه المدة يُعرض كقديم في لوحة المتابعة.',
-    control: 'number',
-    schema: z.number().int().min(1).max(43_200),
-    defaultValue: 1440,
-    failClosed: false,
-  },
-  {
-    key: 'health.empty_run_threshold',
-    labelAr: 'عدد التشغيلات الفارغة قبل التدهور',
-    descriptionAr: 'تشغيلات ناجحة بلا نتائج متتالية قبل وسم المصدر «متدهوراً» — تكشف مُحدِّداً معطلاً.',
-    control: 'number',
-    schema: z.number().int().min(1).max(50),
-    defaultValue: 3,
-    failClosed: false,
-  },
-  {
-    key: 'newsletter.enabled',
-    labelAr: 'تفعيل النشرة الأسبوعية',
-    descriptionAr: 'المفتاح الرئيسي للإرسال. يُشحن معطّلاً حتى تُضبط قائمة المستلمين.',
-    control: 'boolean',
-    schema: z.boolean(),
-    defaultValue: false,
-    failClosed: false,
-  },
-  {
-    key: 'newsletter.recipients',
-    labelAr: 'مستلمو النشرة',
-    descriptionAr: 'عناوين البريد الإلكتروني الداخلية، عنوان في كل سطر.',
-    control: 'string_list',
-    schema: emailList,
-    defaultValue: [],
-    failClosed: true,
-    failClosedNoteAr:
-      'إعداد حسّاس: عند غيابه أو فراغه تتوقف النشرة وتُسجَّل «أخفقت» بدلاً من الإرسال إلى قائمة غير مقصودة.',
-  },
-  {
-    key: 'newsletter.schedule',
-    labelAr: 'موعد إرسال النشرة',
-    descriptionAr: 'اليوم 0 = الأحد … 6 = السبت، والساعة من 0 إلى 23 بتوقيت المنصة.',
-    control: 'json',
-    schema: z
-      .object({ day: z.number().int().min(0).max(6), hour: z.number().int().min(0).max(23) })
-      .strict(),
-    defaultValue: { day: 0, hour: 7 },
-    failClosed: false,
-  },
-  {
     key: 'app.timezone',
     labelAr: 'المنطقة الزمنية',
-    descriptionAr: 'تُستخدم في تجميع التواريخ ونوافذ النشرة والعرض.',
+    descriptionAr: 'تُستخدم في تجميع التواريخ وعرضها.',
     control: 'text',
     schema: z.string().refine(
       (tz) => {
@@ -243,10 +169,8 @@ export type SettingResolution<T> =
  *
  * A non-critical setting falls back to its registry default when absent or
  * malformed. A `failClosed` setting does NOT — it returns an error, and the
- * caller is expected to abort. That asymmetry is the whole point: silently
- * defaulting `ai.confidence_threshold` could widen what gets published, and
- * silently defaulting `newsletter.recipients` could send legal content to the
- * wrong list.
+ * caller is expected to abort, for a setting whose default would silently
+ * widen behaviour rather than merely being suboptimal.
  */
 export function resolveSetting<T = unknown>(
   key: string,

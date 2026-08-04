@@ -20,10 +20,11 @@ import { canActivate } from '@/lib/sources/status'
 /* -------------------------------------------------------------------------- */
 
 describe('settings registry is a closed allow-list', () => {
-  it('recognises exactly the ten declared keys', () => {
-    expect(SETTING_DEFINITIONS).toHaveLength(10)
-    expect(isKnownSettingKey('ai.confidence_threshold')).toBe(true)
-    expect(isKnownSettingKey('newsletter.recipients')).toBe(true)
+  it('recognises exactly the three declared keys', () => {
+    expect(SETTING_DEFINITIONS).toHaveLength(3)
+    expect(isKnownSettingKey('ingestion.priority_intervals')).toBe(true)
+    expect(isKnownSettingKey('ingestion.retry_backoff_minutes')).toBe(true)
+    expect(isKnownSettingKey('app.timezone')).toBe(true)
   })
 
   it('rejects an unknown key', () => {
@@ -60,24 +61,6 @@ describe('settings registry is a closed allow-list', () => {
 })
 
 describe('settings value validation', () => {
-  it('accepts a valid confidence threshold', () => {
-    expect(parseSettingValue('ai.confidence_threshold', 0.95).ok).toBe(true)
-  })
-
-  it('rejects a confidence outside 0..1', () => {
-    expect(parseSettingValue('ai.confidence_threshold', 1.5).ok).toBe(false)
-    expect(parseSettingValue('ai.confidence_threshold', -0.1).ok).toBe(false)
-  })
-
-  it('rejects a malformed recipients list', () => {
-    expect(parseSettingValue('newsletter.recipients', ['not-an-email']).ok).toBe(false)
-    expect(parseSettingValue('newsletter.recipients', 'a@b.com').ok).toBe(false)
-  })
-
-  it('accepts a valid recipients list', () => {
-    expect(parseSettingValue('newsletter.recipients', ['legal@internal.test']).ok).toBe(true)
-  })
-
   it('rejects malformed JSONB for the interval map', () => {
     expect(parseSettingValue('ingestion.priority_intervals', { '1': 60 }).ok).toBe(false)
     expect(parseSettingValue('ingestion.priority_intervals', 'not an object').ok).toBe(false)
@@ -100,47 +83,29 @@ describe('settings value validation', () => {
   })
 })
 
-describe('fail-closed resolution', () => {
-  it('FAILS rather than defaulting when the confidence threshold is missing', () => {
-    const r = resolveSetting('ai.confidence_threshold', null)
-    expect(r.ok).toBe(false)
-  })
-
-  it('FAILS rather than defaulting when the threshold is malformed', () => {
-    expect(resolveSetting('ai.confidence_threshold', 'nonsense').ok).toBe(false)
-  })
-
-  it('FAILS rather than defaulting when recipients are missing', () => {
-    expect(resolveSetting('newsletter.recipients', null).ok).toBe(false)
-  })
-
-  it('falls back to the default for a non-critical setting', () => {
-    const r = resolveSetting<number>('health.stale_after_minutes', null)
+describe('setting resolution', () => {
+  it('falls back to the registry default when a setting is missing', () => {
+    const r = resolveSetting<string>('app.timezone', null)
     expect(r.ok).toBe(true)
     if (r.ok) {
-      expect(r.value).toBe(1440)
+      expect(r.value).toBe('Asia/Riyadh')
       expect(r.usedDefault).toBe(true)
     }
   })
 
-  it('falls back for a malformed non-critical setting', () => {
-    const r = resolveSetting<boolean>('newsletter.enabled', 'not a boolean')
+  it('falls back for a malformed stored value', () => {
+    const r = resolveSetting<string>('app.timezone', 'Mars/Olympus')
     expect(r.ok).toBe(true)
-    if (r.ok) expect(r.value).toBe(false)
+    if (r.ok) expect(r.value).toBe('Asia/Riyadh')
   })
 
   it('returns the stored value when it is valid', () => {
-    const r = resolveSetting<number>('ai.confidence_threshold', 0.95)
+    const r = resolveSetting<string>('app.timezone', 'Asia/Dubai')
     expect(r.ok).toBe(true)
     if (r.ok) {
-      expect(r.value).toBe(0.95)
+      expect(r.value).toBe('Asia/Dubai')
       expect(r.usedDefault).toBe(false)
     }
-  })
-
-  it('marks exactly the two security-sensitive settings fail-closed', () => {
-    const failClosed = SETTING_DEFINITIONS.filter((d) => d.failClosed).map((d) => d.key)
-    expect(failClosed.sort()).toEqual(['ai.confidence_threshold', 'newsletter.recipients'])
   })
 })
 

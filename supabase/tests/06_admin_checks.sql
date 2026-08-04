@@ -176,7 +176,7 @@ declare r record; begin
   -- Re-assert the M2 seal after everything M7 added.
   for r in
     select t.tbl, rl.role_name, pr.priv
-    from unnest(array['legal_updates','workflow_logs','newsletter_history']) as t(tbl)
+    from unnest(array['legal_updates']) as t(tbl)
     cross join unnest(array['anon','authenticated'])                        as rl(role_name)
     cross join unnest(array['INSERT','UPDATE','DELETE','TRUNCATE'])         as pr(priv)
   loop

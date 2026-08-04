@@ -25,15 +25,6 @@ export function formatDateAr(value: string | Date | null | undefined, timeZone =
   }).format(date)
 }
 
-/** Formats a duration in milliseconds as a short Arabic string. */
-export function formatDurationAr(ms: number | null | undefined): string {
-  if (ms === null || ms === undefined) return '—'
-  if (ms < 1000) return `${ms} ملّي ثانية`
-  const seconds = ms / 1000
-  if (seconds < 60) return `${seconds.toFixed(1)} ثانية`
-  return `${Math.round(seconds / 60)} دقيقة`
-}
-
 /**
  * Extracts a hostname for domain allow-list display. Returns null for input
  * that is not a parseable absolute URL rather than throwing.

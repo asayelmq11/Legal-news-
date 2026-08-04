@@ -1,10 +1,12 @@
 # منصة الرصد القانوني الخليجي — Legal Intelligence Platform
 
-Internal platform for the Legal Department. Continuously monitors official legal
-and regulatory sources across the GCC, classifies and summarizes updates with AI,
-publishes them to a searchable internal archive, and mails a weekly digest.
+Internal platform for the Legal Department. Continuously monitors official
+legal and regulatory sources across the GCC, classifies and summarizes
+updates with AI, and publishes them to a searchable internal archive.
 
-**Internal system.** No public pages, no registration, no SEO, no billing.
+**Internal system.** No public pages, no registration, no SEO, no billing. A
+small internal tool: Login, a dashboard of legal updates, and an admin
+section (Sources / Users / Settings). Nothing else.
 
 ---
 
@@ -14,16 +16,16 @@ Three components. n8n is the only orchestrator.
 
 | Component | Owns | Never does |
 |---|---|---|
-| **n8n** | Scheduling, crawling, parsing, AI, classification, publishing rules, retries, notifications, logging | — |
+| **n8n** | Scheduling, crawling, parsing, AI classification, publishing rules, notifications | — |
 | **Supabase** | Postgres, Auth, Storage, RLS. Integrity constraints only | Hold business rules |
 | **Next.js** | Dashboard, archive, search, admin (sources / users / settings) | Write `legal_updates`. Orchestrate anything |
 
 `legal_updates` is write-sealed against the web application: no write policy
-exists for `authenticated`, and INSERT/UPDATE/DELETE are explicitly revoked. Only
-n8n, holding the `service_role` key, writes the archive.
+exists for `authenticated`, and INSERT/UPDATE/DELETE are explicitly revoked.
+Only n8n, holding the `service_role` key, writes the archive.
 
-Full design — data model, parser strategy, publishing gate, retry and scheduling
-policy — is in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
+n8n's own setup and the workflow architecture — three workflows in substance,
+five files — is in [`n8n/README.md`](n8n/README.md).
 
 ---
 
@@ -31,7 +33,7 @@ policy — is in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
 
 - Node.js >= 20.9 (developed on 22.x)
 - A Supabase project
-- An n8n instance that can reach Supabase and the AI provider
+- An n8n instance that can reach Supabase and Azure OpenAI
 
 ---
 
@@ -49,9 +51,9 @@ npm run dev
 | `npm run build` | Production build (fails on type errors) |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | vitest — 346 assertions incl. session persistence, retry, health, locks, alerts |
+| `npm run test` | vitest |
 | `npm run verify` | typecheck → lint → test → build. **This is what CI runs.** |
-| `npm run db:check` | applies all migrations to a scratch Postgres and runs 61 SQL assertions |
+| `npm run db:check` | applies all migrations to a scratch Postgres and runs the SQL assertion suite |
 | `npm run db:types` | regenerates `types/database.ts` from a live schema |
 
 Next 16 no longer runs ESLint during `next build`, which is why `verify` exists
@@ -95,12 +97,7 @@ These belong in **n8n Credentials** and must never appear in `.env.local`, in
 `app_settings`, or in committed files:
 
 - `SUPABASE_SERVICE_ROLE_KEY` — bypasses RLS; sole write path to the archive
-- AI provider API key
-- SMTP / Microsoft 365 credentials
-
-The `N8N_TRIGGER_SECRET` used by the admin "Run now" control is server-side only
-and is deliberately not `NEXT_PUBLIC_`. When it is missing the control fails
-closed — disabled with an explanation, never an unauthenticated request.
+- Azure OpenAI API key (`Azure OpenAI account` credential — see `n8n/README.md` §2)
 
 A **password-recovery URL is a credential.** Its fragment carries a live access
 token and refresh token, so it must never be pasted into a chat, a ticket, or a
@@ -123,47 +120,38 @@ app/
 components/         UI primitives and feature components
 lib/
   auth/             session resolution, role guards, sign-in/out, recovery
-  ops/              retry policy, health scoring, locks, manual run
+  admin/            sources / users / settings admin queries + actions
   queries/          server-only typed reads (no raw SQL)
   search/           Arabic normalisation — contract shared with Postgres
   updates/          filter parsing, external-link verification
   supabase/         browser / server / proxy clients
   sources/          source status derivation
+  discovery/         Google News discovery matching logic
   constants/        country and taxonomy registries, Arabic labels
+  settings/         the closed app_settings allow-list
   env.ts            validated server environment (server-only)
   nav.ts            role-aware navigation
 proxy.ts            Next 16 proxy — session refresh + coarse redirect
 scripts/            database type generator
-tests/              vitest — auth, guards, status derivation
+tests/              vitest suite
 types/database.ts   GENERATED from the live schema
 supabase/
   migrations/         ordered SQL — integrity constraints only
   fixtures/           dev-only fake data — NEVER applied to production
-  tests/              SQL verification suite (105 assertions)
+  tests/              SQL verification suite
 n8n/                  importable workflow JSON + setup guide
-docs/                 implementation plan and runbooks
+docs/                 egress verification, source provisioning, discovery architecture
 ```
 
-`lib/constants/` is the source of truth for the country and taxonomy values that
-become Postgres enums in M2 and constrained AI outputs in M9. Changing a value
-means changing all three together.
+`lib/constants/` is the source of truth for the country and taxonomy values
+that become Postgres enums and constrained AI outputs. Changing a value means
+changing both together.
 
----
+## Schema
 
-## Build status
-
-| Milestone | Status |
-|---|---|
-| M1 Project foundation | ✅ complete |
-| M2 Database schema | ✅ complete |
-| M3 Source registry | ✅ complete |
-| M4 Auth + app shell | ✅ complete |
-| M5 Internal legal archive | ✅ complete |
-| M6 Dashboard + health | ✅ complete |
-| M7 Admin: sources / users / settings | ✅ complete |
-| M7.5 Egress verification | 🔧 tooling shipped — must be RUN from production egress |
-| M8 n8n: scheduler + parsers | ✅ complete |
-| M9 n8n: AI + publishing gate | ✅ complete |
-| M10 n8n: retry, health, manual run | ✅ complete |
-| M11 n8n: newsletter | ⬜ next |
-| M12 Hardening + docs | ⬜ |
+Four tables: `users`, `sources`, `legal_updates`, `app_settings`. See
+`supabase/migrations/0023_simplify_platform.sql` for what was removed —
+execution history, health snapshots, dead-letter queue, the manual-run
+idempotency ledger, and the newsletter — and why (that operational machinery
+served admin UI this platform no longer has; retries are now n8n's own
+per-node `retryOnFail`, not a database-backed queue).

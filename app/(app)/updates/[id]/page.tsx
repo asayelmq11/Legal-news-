@@ -181,7 +181,9 @@ export default async function UpdateDetailPage({
       {isAdmin && item.confidence !== undefined ? (
         <Section title="بيانات التصنيف (للمسؤولين)">
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
-            <Meta label="ثقة التصنيف" value={`${(item.confidence * 100).toFixed(0)}%`} />
+            {item.confidence !== null ? (
+              <Meta label="ثقة التصنيف" value={`${(item.confidence * 100).toFixed(0)}%`} />
+            ) : null}
             <Meta label="النموذج" value={item.ai_model ?? '—'} />
             <Meta label="بصمة المحتوى" value={item.content_hash?.slice(0, 16) ?? '—'} mono />
             <Meta label="تاريخ الإدراج" value={formatDateAr(item.created_at)} />

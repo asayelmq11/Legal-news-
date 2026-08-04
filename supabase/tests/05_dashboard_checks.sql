@@ -109,41 +109,14 @@ declare total int; tallied int; begin
   raise notice 'PASS — every one of % sources falls into exactly one status', total;
 end $$;
 
-\echo '── D5. health and workflow queries are bounded ─────────────────────────'
+\echo '── D5. sources stays small enough for the admin page to read whole ─────'
 do $$
-declare plan text; n int; begin
-  set local enable_seqscan = off;
-
-  -- last successful / failed run: ordered by an indexed column, limit 1
-  execute 'explain (format json) select * from public.workflow_logs '
-       || 'where status = ''success'' order by started_at desc limit 1' into plan;
-  if plan not like '%Index%' then
-    raise exception 'last-successful-run lookup is not index-backed: %', plan;
-  end if;
-
-  execute 'explain (format json) select * from public.workflow_logs '
-       || 'where status <> ''success'' order by started_at desc limit 10' into plan;
-  if plan not like '%Index%' then
-    raise exception 'recent-failures lookup is not index-backed: %', plan;
-  end if;
-
-  -- sources is a small bounded table; confirm it stays small enough to read whole
+declare n int; begin
   select count(*) into n from public.sources;
   if n > 500 then
-    raise exception 'sources has grown to % rows — the dashboard reads it whole', n;
+    raise exception 'sources has grown to % rows — the admin page reads it whole', n;
   end if;
-
-  raise notice 'PASS — workflow lookups index-backed; sources bounded at % rows', n;
-end $$;
-
-\echo '── D6. newsletter status counts are complete ───────────────────────────'
-do $$
-declare total int; s int; begin
-  select count(*) into total from public.newsletter_history;
-  select coalesce(sum(c), 0) into s from (
-    select count(*) c from public.newsletter_history group by status) x;
-  if s <> total then raise exception 'newsletter buckets sum to % not %', s, total; end if;
-  raise notice 'PASS — newsletter status buckets sum to the total (%)', total;
+  raise notice 'PASS — sources bounded at % rows', n;
 end $$;
 
 \echo '── D7. a viewer can read everything the legal overview needs ───────────'
@@ -153,13 +126,9 @@ declare n int; begin
   set local request.jwt.claim.sub = 'bbbbbbbb-0000-0000-0000-000000000002';
 
   select count(*) into n from public.legal_updates where country = 'SA';
-  if n = 0 then reset role; raise exception 'viewer cannot count the archive'; end if;
-
-  -- and the operational tables the admin section uses are readable too, since
-  -- the separation is enforced by the application, not by RLS
-  select count(*) into n from public.workflow_logs;
   reset role;
-  raise notice 'PASS — viewer can compute legal metrics (operational split is app-level, as documented)';
+  if n = 0 then raise exception 'viewer cannot count the archive'; end if;
+  raise notice 'PASS — viewer can compute legal metrics';
 end $$;
 
 \echo ''

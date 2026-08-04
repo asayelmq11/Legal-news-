@@ -5,14 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useRef } from 'react'
 
 import { COUNTRIES, COUNTRY_CODES } from '@/lib/constants/countries'
-import {
-  DOCUMENT_TYPES,
-  DOCUMENT_TYPE_LABELS_AR,
-  LEGAL_CATEGORIES,
-  LEGAL_CATEGORY_LABELS_AR,
-  LEGAL_STATUSES,
-  LEGAL_STATUS_LABELS_AR,
-} from '@/lib/constants/taxonomy'
+import { LEGAL_CATEGORIES, LEGAL_CATEGORY_LABELS_AR } from '@/lib/constants/taxonomy'
 
 interface SourceOption {
   id: string
@@ -31,13 +24,7 @@ interface SourceOption {
  * `page` is deliberately not carried over — changing a filter should return to
  * page 1, not leave the reader on page 7 of a different result set.
  */
-export function ArchiveFilterPanel({
-  sources,
-  isAdmin,
-}: {
-  sources: readonly SourceOption[]
-  isAdmin: boolean
-}) {
+export function ArchiveFilterPanel({ sources }: { sources: readonly SourceOption[] }) {
   const params = useSearchParams()
   const router = useRouter()
   const formRef = useRef<HTMLFormElement>(null)
@@ -90,24 +77,6 @@ export function ArchiveFilterPanel({
           }))}
           selected={getAll('category')}
         />
-        <MultiSelect
-          id="documentType"
-          label="نوع الوثيقة"
-          options={DOCUMENT_TYPES.map((d) => ({
-            value: d,
-            label: DOCUMENT_TYPE_LABELS_AR[d],
-          }))}
-          selected={getAll('documentType')}
-        />
-        <MultiSelect
-          id="legalStatus"
-          label="الحالة النظامية"
-          options={LEGAL_STATUSES.map((s) => ({
-            value: s,
-            label: LEGAL_STATUS_LABELS_AR[s],
-          }))}
-          selected={getAll('legalStatus')}
-        />
       </div>
 
       <div className="space-y-1.5">
@@ -129,67 +98,13 @@ export function ArchiveFilterPanel({
         </select>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <DateRange
-          label="تاريخ النشر"
-          fromName="publishedFrom"
-          toName="publishedTo"
-          fromValue={get('publishedFrom')}
-          toValue={get('publishedTo')}
-        />
-        <DateRange
-          label="تاريخ النفاذ"
-          fromName="effectiveFrom"
-          toName="effectiveTo"
-          fromValue={get('effectiveFrom')}
-          toValue={get('effectiveTo')}
-        />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <TextField
-          id="entity"
-          label="الجهات المتأثرة"
-          placeholder="مفصولة بفواصل"
-          defaultValue={getAll('entity').join(',')}
-        />
-        <TextField
-          id="keyword"
-          label="الكلمات المفتاحية"
-          placeholder="مطابقة تامة، مفصولة بفواصل"
-          defaultValue={getAll('keyword').join(',')}
-        />
-      </div>
-
-      {/* Confidence is an administrative filter; the control is not rendered
-          for viewers, and the parser discards the parameter for them anyway. */}
-      {isAdmin ? (
-        <fieldset className="rounded-md border border-(--color-border) p-3">
-          <legend className="px-1 text-xs font-medium text-(--color-ink-muted)">
-            ثقة التصنيف (للمسؤولين)
-          </legend>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <TextField
-              id="confidenceMin"
-              label="الحد الأدنى"
-              type="number"
-              step="0.01"
-              min="0"
-              max="1"
-              defaultValue={get('confidenceMin')}
-            />
-            <TextField
-              id="confidenceMax"
-              label="الحد الأعلى"
-              type="number"
-              step="0.01"
-              min="0"
-              max="1"
-              defaultValue={get('confidenceMax')}
-            />
-          </div>
-        </fieldset>
-      ) : null}
+      <DateRange
+        label="تاريخ النشر"
+        fromName="publishedFrom"
+        toName="publishedTo"
+        fromValue={get('publishedFrom')}
+        toValue={get('publishedTo')}
+      />
 
       <div className="flex items-center gap-2">
         <button
@@ -280,25 +195,5 @@ function DateRange({
         />
       </div>
     </fieldset>
-  )
-}
-
-function TextField({
-  id,
-  label,
-  ...props
-}: { id: string; label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="block text-sm font-medium text-(--color-ink)">
-        {label}
-      </label>
-      <input
-        id={id}
-        name={id}
-        className="w-full rounded-md border border-(--color-border-strong) bg-(--color-surface) px-3 py-2 text-sm outline-none focus:border-(--color-brand)"
-        {...props}
-      />
-    </div>
   )
 }

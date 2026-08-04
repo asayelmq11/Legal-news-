@@ -7,16 +7,14 @@
 
 \echo '── 1. the table set is exactly the approved one ─────────────────────────'
 /*
- * Six core tables (M2) plus the operational tables M10 required:
- * source_health_snapshots, job_dead_letters, and manual_run_dispatches (the
- * async manual-run idempotency ledger, 0018). Asserted as an exact SET rather
- * than a count, so an unplanned table is caught by name.
+ * The platform's whole schema (0023): users, sources, legal_updates,
+ * app_settings. Asserted as an exact SET rather than a count, so an unplanned
+ * table is caught by name.
  */
 do $$
 declare
   expected text[] := array[
-    'app_settings','job_dead_letters','legal_updates','manual_run_dispatches',
-    'newsletter_history','source_health_snapshots','sources','users','workflow_logs'
+    'app_settings','legal_updates','sources','users'
   ];
   found text[];
 begin
@@ -26,7 +24,7 @@ begin
   if found is distinct from expected then
     raise exception 'table set drifted. expected %, found %', expected, found;
   end if;
-  raise notice 'PASS — exactly the 9 approved tables: %', array_to_string(found, ', ');
+  raise notice 'PASS — exactly the 4 approved tables: %', array_to_string(found, ', ');
 end $$;
 
 \echo '── 2. no rule triggers anywhere ────────────────────────────────────────'
@@ -77,11 +75,11 @@ declare bad text; begin
   select string_agg(format('%s.%s(%s)', tablename, policyname, cmd), ', ') into bad
   from pg_policies
   where schemaname = 'public'
-    and tablename in ('legal_updates','workflow_logs','newsletter_history')
+    and tablename = 'legal_updates'
     and cmd <> 'SELECT';
 
   if bad is not null then raise exception 'unexpected write policy: %', bad; end if;
-  raise notice 'PASS — legal_updates/workflow_logs/newsletter_history are select-only';
+  raise notice 'PASS — legal_updates is select-only';
 end $$;
 
 \echo '── 6. archive write privileges revoked from anon + authenticated ───────'
@@ -89,7 +87,7 @@ do $$
 declare r record; begin
   for r in
     select t.tbl, rl.role_name, pr.priv
-    from unnest(array['legal_updates','workflow_logs','newsletter_history']) as t(tbl)
+    from unnest(array['legal_updates']) as t(tbl)
     cross join unnest(array['anon','authenticated'])                        as rl(role_name)
     cross join unnest(array['INSERT','UPDATE','DELETE','TRUNCATE'])         as pr(priv)
   loop
@@ -97,7 +95,7 @@ declare r record; begin
       raise exception 'SEAL BREACH: % has % on %', r.role_name, r.priv, r.tbl;
     end if;
   end loop;
-  raise notice 'PASS — no INSERT/UPDATE/DELETE/TRUNCATE for anon or authenticated on archive tables';
+  raise notice 'PASS — no INSERT/UPDATE/DELETE/TRUNCATE for anon or authenticated on the archive table';
 end $$;
 
 \echo '── 6b. anon has no privilege on ANY table ──────────────────────────────'
@@ -148,39 +146,33 @@ end $$;
 do $$
 declare n int; begin
   select count(*) into n from public.app_settings;
-  if n <> 10 then raise exception 'expected 10 seeded settings, found %', n; end if;
+  if n <> 3 then raise exception 'expected 3 seeded settings, found %', n; end if;
 
-  if (select value from public.app_settings where key='ai.confidence_threshold')::numeric <> 0.90 then
-    raise exception 'confidence threshold default wrong';
-  end if;
   if (select value->>'1' from public.app_settings where key='ingestion.priority_intervals') <> '60' then
     raise exception 'priority tier 1 should be 60 minutes';
   end if;
-  if (select value from public.app_settings where key='newsletter.enabled')::boolean then
-    raise exception 'newsletter must ship disabled';
-  end if;
-  raise notice 'PASS — 10 settings seeded with safe defaults';
+  raise notice 'PASS — 3 settings seeded with safe defaults';
 end $$;
 
 \echo '── 10. seed is idempotent ──────────────────────────────────────────────'
 do $$
 declare before_n int; after_n int; before_v jsonb; after_v jsonb; begin
-  update public.app_settings set value='0.95'::jsonb where key='ai.confidence_threshold';
-  select count(*), (select value from public.app_settings where key='ai.confidence_threshold')
+  update public.app_settings set value='"Asia/Dubai"'::jsonb where key='app.timezone';
+  select count(*), (select value from public.app_settings where key='app.timezone')
     into before_n, before_v from public.app_settings;
 
   -- re-running the seed must not clobber the tuned value
   insert into public.app_settings(key, value, description)
-  values ('ai.confidence_threshold','0.90'::jsonb,'x')
+  values ('app.timezone','"Asia/Riyadh"'::jsonb,'x')
   on conflict (key) do nothing;
 
-  select count(*), (select value from public.app_settings where key='ai.confidence_threshold')
+  select count(*), (select value from public.app_settings where key='app.timezone')
     into after_n, after_v from public.app_settings;
 
   if before_n <> after_n or before_v <> after_v then
     raise exception 'seed not idempotent: % -> %', before_v, after_v;
   end if;
-  update public.app_settings set value='0.90'::jsonb where key='ai.confidence_threshold';
+  update public.app_settings set value='"Asia/Riyadh"'::jsonb where key='app.timezone';
   raise notice 'PASS — re-seeding preserves admin-tuned values';
 end $$;
 
