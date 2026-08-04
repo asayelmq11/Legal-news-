@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-04T13:43:43.738Z",
+  "updatedAt": "2026-08-04T14:05:42.179Z",
   "createdAt": "2026-08-01T16:46:39.922Z",
   "id": "FHt8uKbBcixIWbWO",
   "name": "02 — Source Ingestion",
@@ -527,26 +527,6 @@
     },
     {
       "parameters": {
-        "tableId": "workflow_logs",
-        "dataToSend": "autoMapInputData"
-      },
-      "id": "170a7b3f-ac3f-48af-8f31-93784e1be5bd",
-      "name": "Write workflow log",
-      "type": "n8n-nodes-base.supabase",
-      "typeVersion": 1,
-      "position": [
-        2720,
-        304
-      ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "10zDIxzQYFnJuOmh",
-          "name": "Supabase account 2"
-        }
-      }
-    },
-    {
-      "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
@@ -937,17 +917,6 @@
         ]
       ]
     },
-    "Summarise run": {
-      "main": [
-        [
-          {
-            "node": "Write workflow log",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Has items?": {
       "main": [
         [
@@ -966,33 +935,11 @@
         ]
       ]
     },
-    "Build empty run summary": {
-      "main": [
-        [
-          {
-            "node": "Write workflow log",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Record fetch failure": {
       "main": [
         [
           {
             "node": "Build failed run summary",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build failed run summary": {
-      "main": [
-        [
-          {
-            "node": "Write workflow log",
             "type": "main",
             "index": 0
           }
@@ -1031,8 +978,6 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false,
     "callerPolicy": "workflowsFromSameOwner"
   },
   "staticData": null,

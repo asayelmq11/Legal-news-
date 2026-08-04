@@ -244,8 +244,6 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false,
     "callerPolicy": "workflowsFromSameOwner"
   },
   "staticData": {

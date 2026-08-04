@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-04T13:48:34.911Z",
+  "updatedAt": "2026-08-04T14:06:30.517Z",
   "createdAt": "2026-08-01T15:13:12.884Z",
   "id": "HWSwJIZfuZVsErD8",
   "name": "04 — Manual Run",
@@ -374,8 +374,6 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false,
     "callerPolicy": "workflowsFromSameOwner"
   },
   "staticData": {
