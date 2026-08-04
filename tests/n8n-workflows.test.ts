@@ -82,22 +82,150 @@ describe('n8n workflow exports', () => {
     expect(names).toContain('Normalise RawItem')
   })
 
-  it('every HTTP node retries on transient failure', () => {
+  it('the four fetch lanes retry on transient failure and isolate their errors', () => {
+    // The Classify-with-AI HTTP nodes are covered separately below — they
+    // use neverError + a custom retry graph instead of retryOnFail, so they
+    // are deliberately excluded from this node-level retryOnFail check.
     const raw = readFileSync(new URL('02-source-ingestion.json', DIR), 'utf8')
     const wf = JSON.parse(raw) as { nodes: Array<Record<string, unknown>> }
     const http = wf.nodes.filter((n) => n.type === 'n8n-nodes-base.httpRequest')
-    // four fetch lanes plus the AI call
-    expect(http.length).toBe(5)
-    for (const node of http) {
-      expect(node.retryOnFail, `${String(node.name)} must retry`).toBe(true)
-    }
-    // the four crawl lanes must isolate their failure so one dead source
-    // cannot stop the others in the same tick
+    // four fetch lanes plus three Classify-with-AI attempts (initial + 2 retries)
+    expect(http.length).toBe(7)
     const lanes = http.filter((n) => String(n.name).startsWith('Fetch'))
     expect(lanes.length).toBe(4)
     for (const node of lanes) {
+      expect(node.retryOnFail, `${String(node.name)} must retry`).toBe(true)
+      // the four crawl lanes must isolate their failure so one dead source
+      // cannot stop the others in the same tick
       expect(node.onError).toBe('continueErrorOutput')
     }
+  })
+
+  /* ---------------------------------------------------------------------- */
+  /* Execution 25483 fix (2026-08-04) — 16/31 AI calls came back as 529      */
+  /* "overloaded_error" because the whole batch was sent to Anthropic        */
+  /* concurrently in one httpRequest-node fan-out. Fixed with a batched call */
+  /* plus a bounded, exponential-backoff retry graph (3 attempts total).     */
+  /* ---------------------------------------------------------------------- */
+
+  it('every Classify with AI attempt never throws and returns the full response', () => {
+    // neverError + fullResponse keep the status code and headers on the
+    // normal output path instead of n8n's error path, which drops headers
+    // entirely — without this, Retry-After can never be read.
+    const wf = loadFull('02-source-ingestion.json')
+    for (const name of ['Classify with AI', 'Classify with AI (retry 2)', 'Classify with AI (retry 3)']) {
+      const n = wf.nodes.find((x) => x.name === name)
+      expect(n, `${name} not found`).toBeDefined()
+      const options = n?.parameters.options as {
+        response?: { response?: { neverError?: unknown; fullResponse?: unknown } }
+      }
+      expect(options?.response?.response?.neverError, `${name} must never throw`).toBe(true)
+      expect(options?.response?.response?.fullResponse, `${name} must expose status + headers`).toBe(true)
+    }
+  })
+
+  it('the initial AI call is batched instead of firing every item concurrently', () => {
+    // Execution 25483's root cause: 31 items hit Anthropic at once and 16
+    // came back 529. batchSize bounds real concurrency well below that.
+    const wf = loadFull('02-source-ingestion.json')
+    const n = wf.nodes.find((x) => x.name === 'Classify with AI')
+    const options = n?.parameters.options as {
+      batching?: { batch?: { batchSize?: number; batchInterval?: number } }
+    }
+    const batch = options?.batching?.batch
+    expect(batch?.batchSize, 'unbatched concurrency is what caused the 25483 outage').toBeGreaterThan(0)
+    expect(batch?.batchSize as number).toBeLessThan(31)
+    expect(batch?.batchInterval).toBeGreaterThan(0)
+  })
+
+  it('the AI retry classifier retries only 429/500/502/503/529 and never a permanent client error', () => {
+    const wf = loadFull('02-source-ingestion.json')
+    for (const name of [
+      'Interpret AI response (attempt 1)',
+      'Interpret AI response (attempt 2)',
+      'Interpret AI response (attempt 3 — final)',
+    ]) {
+      const n = wf.nodes.find((x) => x.name === name)
+      const code = String(n?.parameters.jsCode ?? '')
+      expect(code, `${name} must define the retryable status set`).toContain(
+        'new Set([429, 500, 502, 503, 529])',
+      )
+      expect(code, `${name} must define the permanent status set`).toContain('new Set([400, 401, 403])')
+      // a permanent status must short-circuit before the retryable check ever applies
+      expect(code.indexOf('const permanent =')).toBeLessThan(code.indexOf('const retryable ='))
+    }
+  })
+
+  it('the AI retry delay backs off exponentially by attempt and honours Retry-After', () => {
+    const wf = loadFull('02-source-ingestion.json')
+    const attempt1 = String(
+      wf.nodes.find((x) => x.name === 'Interpret AI response (attempt 1)')?.parameters.jsCode ?? '',
+    )
+    expect(attempt1).toContain('const ATTEMPT = 1;')
+    expect(attempt1).toContain('BASE_DELAY_MS * 2 ** (ATTEMPT - 1)')
+    expect(attempt1, 'must read the Retry-After header').toContain("headers['retry-after']")
+    const attempt2 = String(
+      wf.nodes.find((x) => x.name === 'Interpret AI response (attempt 2)')?.parameters.jsCode ?? '',
+    )
+    expect(attempt2).toContain('const ATTEMPT = 2;')
+  })
+
+  it('the AI retry graph is bounded — the third attempt is final, never scheduling a fourth', () => {
+    const wf = loadFull('02-source-ingestion.json')
+    const final = wf.nodes.find((x) => x.name === 'Interpret AI response (attempt 3 — final)')
+    expect(String(final?.parameters.jsCode ?? '')).toContain('const IS_FINAL_ATTEMPT = true;')
+    expect(wf.nodes.some((x) => x.name === 'Classify with AI (retry 4)')).toBe(false)
+  })
+
+  it('the AI retry diagnostic never captures the request, headers or credential', () => {
+    const wf = loadFull('02-source-ingestion.json')
+    for (const name of [
+      'Interpret AI response (attempt 1)',
+      'Interpret AI response (attempt 2)',
+      'Interpret AI response (attempt 3 — final)',
+    ]) {
+      const code = String(wf.nodes.find((x) => x.name === name)?.parameters.jsCode ?? '')
+      expect(code).not.toContain('credential')
+      expect(code).not.toMatch(/x-api-key/i)
+    }
+  })
+
+  it('a retryable AI failure is reported by its real reason, never misfiled as ai_empty_response', () => {
+    const raw = readFileSync(new URL('02-source-ingestion.json', DIR), 'utf8')
+    for (const reason of ['ai_rate_limited', 'ai_overloaded', 'ai_timeout', 'ai_http_error', 'ai_truncated_response']) {
+      expect(raw, `${reason} must be a possible rejection reason`).toContain(reason)
+    }
+    const wf = loadFull('02-source-ingestion.json')
+    const code = String(wf.nodes.find((x) => x.name === 'Validate AI output')?.parameters.jsCode ?? '')
+    // the __aiError check must run before the empty-text fallback, or a real
+    // HTTP failure still gets swallowed into the generic empty-response bucket
+    expect(code.indexOf('__aiError')).toBeLessThan(code.indexOf("fail('ai_empty_response')"))
+  })
+
+  it('a response cut off by the token budget is reported as truncated, not empty', () => {
+    const wf = loadFull('02-source-ingestion.json')
+    const code = String(wf.nodes.find((x) => x.name === 'Validate AI output')?.parameters.jsCode ?? '')
+    expect(code).toContain("stop_reason === 'max_tokens'")
+    expect(code).toContain('ai_truncated_response')
+    expect(code.indexOf("stop_reason === 'max_tokens'")).toBeLessThan(code.indexOf("fail('ai_empty_response')"))
+  })
+
+  it('Pair with RawItem recovers the original item by lineage, not array position', () => {
+    // The retry graph can resolve items out of their original order (an
+    // item that needed a retry surfaces later than one that succeeded on
+    // attempt 1), so zipping positionally against Normalise RawItem would
+    // silently mispair items. itemMatching follows n8n's own pairedItem
+    // lineage back to the source item instead.
+    const wf = loadFull('02-source-ingestion.json')
+    const code = String(wf.nodes.find((x) => x.name === 'Pair with RawItem')?.parameters.jsCode ?? '')
+    expect(code).toContain('itemMatching')
+    expect(code).not.toContain("$('Normalise RawItem').all().map")
+  })
+
+  it('every AI retry branch eventually converges back into Pair with RawItem', () => {
+    const wf = loadFull('02-source-ingestion.json')
+    expect(wf.connections['Merge AI results (2)']?.main?.[0]?.[0]?.node).toBe('Pair with RawItem')
+    expect(wf.connections['Classify with AI']?.main?.[0]?.[0]?.node).toBe('Interpret AI response (attempt 1)')
   })
 
   /* ---------------------------------------------------------------------- */

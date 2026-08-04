@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-03T11:19:16.344Z",
+  "updatedAt": "2026-08-04T11:59:58.455Z",
   "createdAt": "2026-08-01T16:46:39.922Z",
   "id": "FHt8uKbBcixIWbWO",
   "name": "02 — Source Ingestion",
@@ -117,13 +117,13 @@
       "parameters": {
         "url": "={{ $json.source.feed_url }}",
         "options": {
+          "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}",
           "response": {
             "response": {
               "responseFormat": "text"
             }
           },
-          "timeout": 30000,
-          "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
+          "timeout": 30000
         }
       },
       "id": "79792d0e-bcaf-4ab9-9147-08f3ef970407",
@@ -172,8 +172,8 @@
         "specifyHeaders": "json",
         "jsonHeaders": "={{ JSON.stringify($json.source.parser_config.headers || {}) }}",
         "options": {
-          "timeout": 30000,
-          "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
+          "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}",
+          "timeout": 30000
         }
       },
       "id": "3d0cd50a-feef-41f2-a744-20d39b4cb093",
@@ -206,13 +206,13 @@
       "parameters": {
         "url": "={{ $json.source.base_url }}",
         "options": {
+          "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}",
           "response": {
             "response": {
               "responseFormat": "text"
             }
           },
-          "timeout": 30000,
-          "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
+          "timeout": 30000
         }
       },
       "id": "537b9077-bd28-4f2c-8978-ba5ada3f26ba",
@@ -269,13 +269,13 @@
       "parameters": {
         "url": "={{ $json.source.base_url }}",
         "options": {
+          "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}",
           "response": {
             "response": {
               "responseFormat": "text"
             }
           },
-          "timeout": 30000,
-          "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
+          "timeout": 30000
         }
       },
       "id": "e6cbeaaa-36b2-4d32-b352-ee4ce1adab5f",
@@ -326,8 +326,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        912,
-        304
+        848,
+        320
       ]
     },
     {
@@ -376,9 +376,22 @@
         "jsonHeaders": "={{ JSON.stringify({ \"anthropic-version\": \"2023-06-01\", \"content-type\": \"application/json\" }) }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 1500, temperature: 0, system: $('Classification prompt').first().json.system_prompt, messages: [{ role: 'user', content: `الجهة: ${$json.source.authority_ar}\\nالدولة المسجّلة للمصدر: ${$json.source.country}\\nالرابط: ${$json.source_url}\\nتاريخ النشر المستخرج من المصدر: ${$json.publication_date || 'غير متوفر'}\\n\\nالعنوان:\\n${$json.title_raw}\\n\\nالنص:\\n${$json.content_raw}` }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 1500, system: $('Classification prompt').first().json.system_prompt, messages: [{ role: 'user', content: `الجهة: ${$json.source.authority_ar}\\nالدولة المسجّلة للمصدر: ${$json.source.country}\\nالرابط: ${$json.source_url}\\nتاريخ النشر المستخرج من المصدر: ${$json.publication_date || 'غير متوفر'}\\n\\nالعنوان:\\n${$json.title_raw}\\n\\nالنص:\\n${$json.content_raw}` }] }) }}",
         "options": {
-          "timeout": 60000
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "batching": {
+            "batch": {
+              "batchSize": 4,
+              "batchInterval": 1000
+            }
+          }
         }
       },
       "id": "cd12041f-9490-447d-94b2-30c6ae7009fa",
@@ -386,12 +399,9 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1120,
+        1184,
         304
       ],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 2000,
       "credentials": {
         "httpHeaderAuth": {
           "id": "jtSVrGAaoOTVzEWT",
@@ -426,7 +436,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Carries the RawItem alongside the AI response so the validator can pair\n// them. n8n keeps item order through the HTTP node, but pairing explicitly is\n// cheaper than relying on that.\nconst items = $('Normalise RawItem').all().map(i => i.json);\nreturn $input.all().map((entry, i) => ({ json: { ...entry.json, __item: items[i] } }));"
+        "jsCode": "// Carries the RawItem alongside the AI response so the validator can pair\n// them. The AI call now branches through a bounded retry graph (see\n// \"Retry AI call? (after attempt N)\"), so an item that needed a retry no\n// longer sits at the same array position as its RawItem — itemMatching\n// follows n8n's own pairedItem lineage back to the source item instead of\n// assuming position N in equals position N out.\nconst out = [];\nconst inputs = $input.all();\nfor (let i = 0; i < inputs.length; i++) {\n  const original = $('Continue after threshold').itemMatching(i).json;\n  out.push({ json: { ...inputs[i].json, __item: original } });\n}\nreturn out;\n"
       },
       "id": "7dbdba25-3c1c-4145-a98d-a87dc926b6a8",
       "name": "Pair with RawItem",
@@ -439,7 +449,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parses and validates the model's JSON. FAIL CLOSED.\n//\n// Anything malformed, incomplete, or outside the allowed enums is rejected\n// outright — never coerced, never defaulted. A coerced category would put a\n// confident wrong classification in a legal archive, which is worse than a gap.\n\nconst COUNTRY = ['SA','AE','KW','QA','BH','OM','GCC'];\nconst CATEGORY = ['tax','customs','employment','corporate','financial','capital_markets','banking','data_privacy','cybersecurity','competition','intellectual_property','litigation','licensing','real_estate','energy','healthcare','trade','general'];\nconst DOC_TYPE = ['law','royal_decree','ministerial_decision','executive_regulation','circular','regulatory_framework','official_notice','court_precedent','consultation_draft','other'];\nconst STATUS = ['enacted','effective','draft','amended','repealed','pending'];\n\nconst ISO_DATE = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst isDate = (v) => {\n  if (v === null || v === undefined || v === '') return true;\n  if (typeof v !== 'string' || !ISO_DATE.test(v)) return false;\n  const d = new Date(v + 'T00:00:00Z');\n  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0,10) === v;\n};\nconst strList = (v) => Array.isArray(v) && v.every(x => typeof x === 'string');\nconst nonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const item = entry.json.__item;\n  const response = entry.json;\n\n  const fail = (reason, detail) => out.push({ json: {\n    __item: item, __rejected: true, reason, detail: detail ? String(detail).slice(0,300) : null,\n  }});\n\n  // The Messages API returns content blocks; the text block carries the JSON.\n  const text = response?.content?.[0]?.text;\n  if (!nonEmpty(text)) { fail('ai_empty_response'); continue; }\n\n  let ai;\n  try {\n    ai = JSON.parse(text.trim());\n  } catch {\n    // One tolerated shape: the model wrapped the object in prose or a fence.\n    const m = text.match(/\\{[\\s\\S]*\\}/);\n    if (!m) { fail('ai_parse_failure', text); continue; }\n    try { ai = JSON.parse(m[0]); } catch { fail('ai_parse_failure', text); continue; }\n  }\n\n  if (!ai || typeof ai !== 'object' || Array.isArray(ai)) { fail('ai_not_an_object'); continue; }\n\n  if (!nonEmpty(ai.title_ar)) { fail('ai_invalid_output', 'title_ar'); continue; }\n  if (!nonEmpty(ai.summary_ar)) { fail('ai_invalid_output', 'summary_ar'); continue; }\n  if (!COUNTRY.includes(ai.country)) { fail('ai_invalid_output', 'country=' + ai.country); continue; }\n  if (!CATEGORY.includes(ai.category)) { fail('ai_invalid_output', 'category=' + ai.category); continue; }\n  if (!DOC_TYPE.includes(ai.document_type)) { fail('ai_invalid_output', 'document_type=' + ai.document_type); continue; }\n  if (!STATUS.includes(ai.legal_status)) { fail('ai_invalid_output', 'legal_status=' + ai.legal_status); continue; }\n  if (typeof ai.is_legal_update !== 'boolean') { fail('ai_invalid_output', 'is_legal_update'); continue; }\n  if (typeof ai.confidence !== 'number' || !Number.isFinite(ai.confidence) || ai.confidence < 0 || ai.confidence > 1) {\n    fail('ai_invalid_output', 'confidence=' + ai.confidence); continue;\n  }\n  if (!isDate(ai.effective_date)) { fail('ai_invalid_output', 'effective_date=' + ai.effective_date); continue; }\n  if (!isDate(ai.publication_date)) { fail('ai_invalid_output', 'publication_date=' + ai.publication_date); continue; }\n  if (ai.affected_entities !== undefined && !strList(ai.affected_entities)) { fail('ai_invalid_output', 'affected_entities'); continue; }\n  if (ai.keywords !== undefined && !strList(ai.keywords)) { fail('ai_invalid_output', 'keywords'); continue; }\n\n  out.push({ json: {\n    __item: item,\n    __rejected: false,\n    ai: {\n      title_ar: ai.title_ar.trim(),\n      summary_ar: ai.summary_ar.trim(),\n      country: ai.country,\n      category: ai.category,\n      document_type: ai.document_type,\n      legal_status: ai.legal_status,\n      is_legal_update: ai.is_legal_update,\n      confidence: ai.confidence,\n      publication_date: ai.publication_date || null,\n      effective_date: ai.effective_date || null,\n      affected_entities: (ai.affected_entities || []).slice(0, 20),\n      keywords: (ai.keywords || []).slice(0, 20),\n    },\n  }});\n}\n\nreturn out;"
+        "jsCode": "// Parses and validates the model's JSON. FAIL CLOSED.\n//\n// Anything malformed, incomplete, or outside the allowed enums is rejected\n// outright — never coerced, never defaulted. A coerced category would put a\n// confident wrong classification in a legal archive, which is worse than a gap.\n\nconst COUNTRY = ['SA','AE','KW','QA','BH','OM','GCC'];\nconst CATEGORY = ['tax','customs','employment','corporate','financial','capital_markets','banking','data_privacy','cybersecurity','competition','intellectual_property','litigation','licensing','real_estate','energy','healthcare','trade','general'];\nconst DOC_TYPE = ['law','royal_decree','ministerial_decision','executive_regulation','circular','regulatory_framework','official_notice','court_precedent','consultation_draft','other'];\nconst STATUS = ['enacted','effective','draft','amended','repealed','pending'];\n\nconst ISO_DATE = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst isDate = (v) => {\n  if (v === null || v === undefined || v === '') return true;\n  if (typeof v !== 'string' || !ISO_DATE.test(v)) return false;\n  const d = new Date(v + 'T00:00:00Z');\n  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0,10) === v;\n};\nconst strList = (v) => Array.isArray(v) && v.every(x => typeof x === 'string');\nconst nonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const item = entry.json.__item;\n  const response = entry.json;\n\n  const fail = (reason, detail) => out.push({ json: {\n    __item: item, __rejected: true, reason, detail: detail ? String(detail).slice(0,300) : null,\n  }});\n\n  // \"Classify with AI\" tags exhausted-retry HTTP failures instead of\n  // leaving them to fall through as a misleading ai_empty_response — a\n  // 529 that never got a response body is not the same failure as the\n  // model actually returning nothing.\n  if (response?.__aiError) {\n    fail(response.__aiFailureReason || 'ai_http_error', JSON.stringify(response.__aiDiagnostic || null));\n    continue;\n  }\n\n  // The Messages API may return a thinking block before the text block.\n  // Find the first actual text block instead of assuming content[0] is text.\n  const textBlock = Array.isArray(response?.content)\n    ? response.content.find(\n        (block) =>\n          block?.type === 'text' &&\n          typeof block.text === 'string'\n      )\n    : null;\n\n  const text = textBlock?.text || '';\n\n  // A response cut off by the token budget is not an empty response —\n  // report it as what it is so it doesn't get silently treated as \"the\n  // model returned nothing\" (which reads as a model/prompt problem when\n  // it's actually a budget problem).\n  if (response?.stop_reason === 'max_tokens') {\n    fail('ai_truncated_response', text || null);\n    continue;\n  }\n\n  if (!nonEmpty(text)) {\n    fail('ai_empty_response');\n    continue;\n  }\n\n  let ai;\n  try {\n    ai = JSON.parse(text.trim());\n  } catch {\n    // One tolerated shape: the model wrapped the object in prose or a fence.\n    const m = text.match(/\\{[\\s\\S]*\\}/);\n    if (!m) { fail('ai_parse_failure', text); continue; }\n    try { ai = JSON.parse(m[0]); } catch { fail('ai_parse_failure', text); continue; }\n  }\n\n  if (!ai || typeof ai !== 'object' || Array.isArray(ai)) { fail('ai_not_an_object'); continue; }\n\n  if (!nonEmpty(ai.title_ar)) { fail('ai_invalid_output', 'title_ar'); continue; }\n  if (!nonEmpty(ai.summary_ar)) { fail('ai_invalid_output', 'summary_ar'); continue; }\n  if (!COUNTRY.includes(ai.country)) { fail('ai_invalid_output', 'country=' + ai.country); continue; }\n  if (!CATEGORY.includes(ai.category)) { fail('ai_invalid_output', 'category=' + ai.category); continue; }\n  if (!DOC_TYPE.includes(ai.document_type)) { fail('ai_invalid_output', 'document_type=' + ai.document_type); continue; }\n  if (!STATUS.includes(ai.legal_status)) { fail('ai_invalid_output', 'legal_status=' + ai.legal_status); continue; }\n  if (typeof ai.is_legal_update !== 'boolean') { fail('ai_invalid_output', 'is_legal_update'); continue; }\n  if (typeof ai.confidence !== 'number' || !Number.isFinite(ai.confidence) || ai.confidence < 0 || ai.confidence > 1) {\n    fail('ai_invalid_output', 'confidence=' + ai.confidence); continue;\n  }\n  if (!isDate(ai.effective_date)) { fail('ai_invalid_output', 'effective_date=' + ai.effective_date); continue; }\n  if (!isDate(ai.publication_date)) { fail('ai_invalid_output', 'publication_date=' + ai.publication_date); continue; }\n  if (ai.affected_entities !== undefined && !strList(ai.affected_entities)) { fail('ai_invalid_output', 'affected_entities'); continue; }\n  if (ai.keywords !== undefined && !strList(ai.keywords)) { fail('ai_invalid_output', 'keywords'); continue; }\n\n  out.push({ json: {\n    __item: item,\n    __rejected: false,\n    ai: {\n      title_ar: ai.title_ar.trim(),\n      summary_ar: ai.summary_ar.trim(),\n      country: ai.country,\n      category: ai.category,\n      document_type: ai.document_type,\n      legal_status: ai.legal_status,\n      is_legal_update: ai.is_legal_update,\n      confidence: ai.confidence,\n      publication_date: ai.publication_date || null,\n      effective_date: ai.effective_date || null,\n      affected_entities: (ai.affected_entities || []).slice(0, 20),\n      keywords: (ai.keywords || []).slice(0, 20),\n    },\n  }});\n}\n\nreturn out;\n"
       },
       "id": "081721b7-6539-42f3-a272-71bf53516dc5",
       "name": "Validate AI output",
@@ -509,10 +519,10 @@
           "attemptToConvertTypes": false,
           "convertFieldsToString": true
         },
+        "mode": "each",
         "options": {
           "waitForSubWorkflow": true
-        },
-        "mode": "each"
+        }
       },
       "id": "249c86c5-e456-4706-a3b2-31c36ffae3ce",
       "name": "Publishing Gate",
@@ -596,7 +606,7 @@
       "typeVersion": 2,
       "position": [
         1200,
-        460
+        464
       ]
     },
     {
@@ -621,8 +631,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1200,
-        160
+        1232,
+        112
       ]
     },
     {
@@ -666,6 +676,279 @@
       "position": [
         -16,
         480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reads the full-response wrapper ({statusCode, headers, body}) from the\n// preceding \"Classify with AI\" HTTP call (configured with neverError +\n// fullResponse, so nothing throws — every outcome, success or failure,\n// arrives here as a normal item). Classifies success / permanent failure /\n// retryable failure, and — for a retryable failure that still has attempts\n// left — computes the exponential-backoff delay for the next round,\n// honouring Retry-After when Anthropic sends one.\n//\n// Attempt 1 of 3.\n\nconst ATTEMPT = 1;\nconst IS_FINAL_ATTEMPT = false;\nconst BASE_DELAY_MS = 1000;\nconst MAX_DELAY_MS = 15000;\nconst RETRYABLE_STATUS = new Set([429, 500, 502, 503, 529]);\nconst PERMANENT_STATUS = new Set([400, 401, 403]);\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const res = entry.json || {};\n  const status = typeof res.statusCode === 'number' ? res.statusCode : null;\n  const headers = res.headers || {};\n  const body = res.body;\n\n  if (status !== null && status >= 200 && status < 300) {\n    out.push({ json: body });\n    continue;\n  }\n\n  const permanent = status !== null && PERMANENT_STATUS.has(status);\n  const retryable = !permanent && (status === null || RETRYABLE_STATUS.has(status));\n\n  const anthropicError = body && typeof body === 'object' ? body.error : null;\n  const diagnostic = {\n    status,\n    anthropicErrorType: anthropicError?.type ?? null,\n    message: String(anthropicError?.message || res.errorMessage || '').slice(0, 300),\n  };\n\n  let reason = 'ai_http_error';\n  if (status === 429) reason = 'ai_rate_limited';\n  else if (status === 529) reason = 'ai_overloaded';\n  else if (status === null) reason = 'ai_timeout';\n\n  if (!retryable || IS_FINAL_ATTEMPT) {\n    out.push({ json: { __aiError: true, __aiFailureReason: reason, __aiDiagnostic: diagnostic } });\n    continue;\n  }\n\n  const retryAfterRaw = headers['retry-after'] ?? headers['Retry-After'];\n  const retryAfterSeconds = retryAfterRaw !== undefined ? Number(retryAfterRaw) : NaN;\n  const retryAfterMs = Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : null;\n\n  let delay = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** (ATTEMPT - 1));\n  if (retryAfterMs !== null) delay = Math.max(delay, Math.min(retryAfterMs, MAX_DELAY_MS));\n\n  out.push({ json: { __aiRetry: true, __aiRetryDelayMs: delay, __aiDiagnostic: diagnostic } });\n}\n\nreturn out;\n"
+      },
+      "id": "4aab7e38-30bf-4c7c-9ea6-978a43fec7b9",
+      "name": "Interpret AI response (attempt 1)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.__aiRetry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "920f57c6-d0b5-47b0-87e3-3ed98a10f967",
+      "name": "Retry AI call? (after attempt 1)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1504,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// The Wait node's dynamic delay expression is evaluated once per node\n// execution, not once per item — so every retryable item in this round\n// must carry the SAME delay value, or whichever item n8n reads for the\n// expression wins arbitrarily for the rest. Stamping the max across the\n// round keeps every item's own backoff/Retry-After honoured: nothing\n// retries before it was told to.\n\nconst items = $input.all();\nconst maxDelay = items.reduce((acc, entry) => Math.max(acc, entry.json.__aiRetryDelayMs || 0), 1000);\nreturn items.map((entry) => ({ json: { ...entry.json, __aiRoundDelayMs: maxDelay } }));\n"
+      },
+      "id": "a7af6848-df37-41eb-a379-895b19b96adb",
+      "name": "Compute AI retry delay (round 1)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        184
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "unit": "seconds",
+        "amount": "={{ Math.ceil($json.__aiRoundDelayMs / 1000) }}"
+      },
+      "id": "3071b698-4a92-45c0-ae77-8466af8d603a",
+      "name": "Wait before AI retry 1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1824,
+        184
+      ],
+      "webhookId": "e2680468-4ff2-4103-8975-f05de3120130"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify({ \"anthropic-version\": \"2023-06-01\", \"content-type\": \"application/json\" }) }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 1500, system: $('Classification prompt').first().json.system_prompt, messages: [{ role: 'user', content: `الجهة: ${$json.source.authority_ar}\\nالدولة المسجّلة للمصدر: ${$json.source.country}\\nالرابط: ${$json.source_url}\\nتاريخ النشر المستخرج من المصدر: ${$json.publication_date || 'غير متوفر'}\\n\\nالعنوان:\\n${$json.title_raw}\\n\\nالنص:\\n${$json.content_raw}` }] }) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "batching": {
+            "batch": {
+              "batchSize": 4,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "id": "95483162-92fa-4ea6-b6e3-0cbc7eadf931",
+      "name": "Classify with AI (retry 2)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1984,
+        184
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jtSVrGAaoOTVzEWT",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reads the full-response wrapper ({statusCode, headers, body}) from the\n// preceding \"Classify with AI\" HTTP call (configured with neverError +\n// fullResponse, so nothing throws — every outcome, success or failure,\n// arrives here as a normal item). Classifies success / permanent failure /\n// retryable failure, and — for a retryable failure that still has attempts\n// left — computes the exponential-backoff delay for the next round,\n// honouring Retry-After when Anthropic sends one.\n//\n// Attempt 2 of 3.\n\nconst ATTEMPT = 2;\nconst IS_FINAL_ATTEMPT = false;\nconst BASE_DELAY_MS = 1000;\nconst MAX_DELAY_MS = 15000;\nconst RETRYABLE_STATUS = new Set([429, 500, 502, 503, 529]);\nconst PERMANENT_STATUS = new Set([400, 401, 403]);\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const res = entry.json || {};\n  const status = typeof res.statusCode === 'number' ? res.statusCode : null;\n  const headers = res.headers || {};\n  const body = res.body;\n\n  if (status !== null && status >= 200 && status < 300) {\n    out.push({ json: body });\n    continue;\n  }\n\n  const permanent = status !== null && PERMANENT_STATUS.has(status);\n  const retryable = !permanent && (status === null || RETRYABLE_STATUS.has(status));\n\n  const anthropicError = body && typeof body === 'object' ? body.error : null;\n  const diagnostic = {\n    status,\n    anthropicErrorType: anthropicError?.type ?? null,\n    message: String(anthropicError?.message || res.errorMessage || '').slice(0, 300),\n  };\n\n  let reason = 'ai_http_error';\n  if (status === 429) reason = 'ai_rate_limited';\n  else if (status === 529) reason = 'ai_overloaded';\n  else if (status === null) reason = 'ai_timeout';\n\n  if (!retryable || IS_FINAL_ATTEMPT) {\n    out.push({ json: { __aiError: true, __aiFailureReason: reason, __aiDiagnostic: diagnostic } });\n    continue;\n  }\n\n  const retryAfterRaw = headers['retry-after'] ?? headers['Retry-After'];\n  const retryAfterSeconds = retryAfterRaw !== undefined ? Number(retryAfterRaw) : NaN;\n  const retryAfterMs = Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : null;\n\n  let delay = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** (ATTEMPT - 1));\n  if (retryAfterMs !== null) delay = Math.max(delay, Math.min(retryAfterMs, MAX_DELAY_MS));\n\n  out.push({ json: { __aiRetry: true, __aiRetryDelayMs: delay, __aiDiagnostic: diagnostic } });\n}\n\nreturn out;\n"
+      },
+      "id": "9248d11f-c2c6-4a41-9e92-e946bf593af1",
+      "name": "Interpret AI response (attempt 2)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2144,
+        184
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.__aiRetry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "22e6fea5-abfb-4cfe-b7c3-884fd50618dd",
+      "name": "Retry AI call? (after attempt 2)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2304,
+        184
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// The Wait node's dynamic delay expression is evaluated once per node\n// execution, not once per item — so every retryable item in this round\n// must carry the SAME delay value, or whichever item n8n reads for the\n// expression wins arbitrarily for the rest. Stamping the max across the\n// round keeps every item's own backoff/Retry-After honoured: nothing\n// retries before it was told to.\n\nconst items = $input.all();\nconst maxDelay = items.reduce((acc, entry) => Math.max(acc, entry.json.__aiRetryDelayMs || 0), 1000);\nreturn items.map((entry) => ({ json: { ...entry.json, __aiRoundDelayMs: maxDelay } }));\n"
+      },
+      "id": "2f566617-3f17-4f36-a6f3-f5cfead80e74",
+      "name": "Compute AI retry delay (round 2)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "unit": "seconds",
+        "amount": "={{ Math.ceil($json.__aiRoundDelayMs / 1000) }}"
+      },
+      "id": "555093ad-fea5-4615-9d95-c54d4eb5296b",
+      "name": "Wait before AI retry 2",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2624,
+        64
+      ],
+      "webhookId": "163c2e96-1dbc-4267-b1ea-55d642d6237e"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify({ \"anthropic-version\": \"2023-06-01\", \"content-type\": \"application/json\" }) }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 1500, system: $('Classification prompt').first().json.system_prompt, messages: [{ role: 'user', content: `الجهة: ${$json.source.authority_ar}\\nالدولة المسجّلة للمصدر: ${$json.source.country}\\nالرابط: ${$json.source_url}\\nتاريخ النشر المستخرج من المصدر: ${$json.publication_date || 'غير متوفر'}\\n\\nالعنوان:\\n${$json.title_raw}\\n\\nالنص:\\n${$json.content_raw}` }] }) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "batching": {
+            "batch": {
+              "batchSize": 4,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "id": "3d01d6e9-7fb2-454a-aba1-6b732f91dc32",
+      "name": "Classify with AI (retry 3)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2784,
+        64
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jtSVrGAaoOTVzEWT",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reads the full-response wrapper ({statusCode, headers, body}) from the\n// preceding \"Classify with AI\" HTTP call (configured with neverError +\n// fullResponse, so nothing throws — every outcome, success or failure,\n// arrives here as a normal item). Classifies success / permanent failure /\n// retryable failure, and — for a retryable failure that still has attempts\n// left — computes the exponential-backoff delay for the next round,\n// honouring Retry-After when Anthropic sends one.\n//\n// Attempt 3 of 3 — final attempt, no further retry.\n\nconst ATTEMPT = 3;\nconst IS_FINAL_ATTEMPT = true;\nconst BASE_DELAY_MS = 1000;\nconst MAX_DELAY_MS = 15000;\nconst RETRYABLE_STATUS = new Set([429, 500, 502, 503, 529]);\nconst PERMANENT_STATUS = new Set([400, 401, 403]);\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const res = entry.json || {};\n  const status = typeof res.statusCode === 'number' ? res.statusCode : null;\n  const headers = res.headers || {};\n  const body = res.body;\n\n  if (status !== null && status >= 200 && status < 300) {\n    out.push({ json: body });\n    continue;\n  }\n\n  const permanent = status !== null && PERMANENT_STATUS.has(status);\n  const retryable = !permanent && (status === null || RETRYABLE_STATUS.has(status));\n\n  const anthropicError = body && typeof body === 'object' ? body.error : null;\n  const diagnostic = {\n    status,\n    anthropicErrorType: anthropicError?.type ?? null,\n    message: String(anthropicError?.message || res.errorMessage || '').slice(0, 300),\n  };\n\n  let reason = 'ai_http_error';\n  if (status === 429) reason = 'ai_rate_limited';\n  else if (status === 529) reason = 'ai_overloaded';\n  else if (status === null) reason = 'ai_timeout';\n\n  if (!retryable || IS_FINAL_ATTEMPT) {\n    out.push({ json: { __aiError: true, __aiFailureReason: reason, __aiDiagnostic: diagnostic } });\n    continue;\n  }\n\n  const retryAfterRaw = headers['retry-after'] ?? headers['Retry-After'];\n  const retryAfterSeconds = retryAfterRaw !== undefined ? Number(retryAfterRaw) : NaN;\n  const retryAfterMs = Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : null;\n\n  let delay = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** (ATTEMPT - 1));\n  if (retryAfterMs !== null) delay = Math.max(delay, Math.min(retryAfterMs, MAX_DELAY_MS));\n\n  out.push({ json: { __aiRetry: true, __aiRetryDelayMs: delay, __aiDiagnostic: diagnostic } });\n}\n\nreturn out;\n"
+      },
+      "id": "719a5b69-e632-438f-934c-b80eed5629bf",
+      "name": "Interpret AI response (attempt 3 — final)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2944,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 2
+      },
+      "id": "2f5e1d17-8f83-417d-950c-4f838b8fa907",
+      "name": "Merge AI results (1)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2304,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 2
+      },
+      "id": "25c52d85-8331-4fa9-81ab-b1b21dd47632",
+      "name": "Merge AI results (2)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        3104,
+        304
       ]
     }
   ],
@@ -888,7 +1171,7 @@
       "main": [
         [
           {
-            "node": "Pair with RawItem",
+            "node": "Interpret AI response (attempt 1)",
             "type": "main",
             "index": 0
           }
@@ -1073,6 +1356,163 @@
           }
         ]
       ]
+    },
+    "Interpret AI response (attempt 1)": {
+      "main": [
+        [
+          {
+            "node": "Retry AI call? (after attempt 1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry AI call? (after attempt 1)": {
+      "main": [
+        [
+          {
+            "node": "Compute AI retry delay (round 1)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge AI results (1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute AI retry delay (round 1)": {
+      "main": [
+        [
+          {
+            "node": "Wait before AI retry 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait before AI retry 1": {
+      "main": [
+        [
+          {
+            "node": "Classify with AI (retry 2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify with AI (retry 2)": {
+      "main": [
+        [
+          {
+            "node": "Interpret AI response (attempt 2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpret AI response (attempt 2)": {
+      "main": [
+        [
+          {
+            "node": "Retry AI call? (after attempt 2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry AI call? (after attempt 2)": {
+      "main": [
+        [
+          {
+            "node": "Compute AI retry delay (round 2)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge AI results (1)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Compute AI retry delay (round 2)": {
+      "main": [
+        [
+          {
+            "node": "Wait before AI retry 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait before AI retry 2": {
+      "main": [
+        [
+          {
+            "node": "Classify with AI (retry 3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify with AI (retry 3)": {
+      "main": [
+        [
+          {
+            "node": "Interpret AI response (attempt 3 — final)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpret AI response (attempt 3 — final)": {
+      "main": [
+        [
+          {
+            "node": "Merge AI results (2)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge AI results (1)": {
+      "main": [
+        [
+          {
+            "node": "Merge AI results (2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge AI results (2)": {
+      "main": [
+        [
+          {
+            "node": "Pair with RawItem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -1086,9 +1526,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "cb9a92ff-556d-4ea7-a60d-29c1720c9016",
-  "activeVersionId": "cb9a92ff-556d-4ea7-a60d-29c1720c9016",
-  "versionCounter": 45,
+  "versionId": "4133024a-23fe-4ea9-8e76-c8f9ca6e4332",
+  "activeVersionId": "4133024a-23fe-4ea9-8e76-c8f9ca6e4332",
+  "versionCounter": 67,
   "triggerCount": 0,
   "shared": [
     {
@@ -1113,7 +1553,7 @@
             "userId": "c6441430-2935-43cb-a7bd-db0da8ae18ce",
             "projectId": "Fo19xH6yJI9Yypvs",
             "user": {
-              "updatedAt": "2026-08-02T21:18:02.485Z",
+              "updatedAt": "2026-08-04T10:19:51.021Z",
               "createdAt": "2026-06-03T19:16:50.624Z",
               "id": "c6441430-2935-43cb-a7bd-db0da8ae18ce",
               "email": "asayelmq@gmail.com",
@@ -1140,7 +1580,7 @@
               },
               "disabled": false,
               "mfaEnabled": false,
-              "lastActiveAt": "2026-08-02",
+              "lastActiveAt": "2026-08-03",
               "isPending": false
             }
           }
@@ -1157,9 +1597,9 @@
     }
   ],
   "activeVersion": {
-    "updatedAt": "2026-08-03T11:19:16.345Z",
-    "createdAt": "2026-08-03T11:19:16.345Z",
-    "versionId": "cb9a92ff-556d-4ea7-a60d-29c1720c9016",
+    "updatedAt": "2026-08-04T11:59:58.459Z",
+    "createdAt": "2026-08-04T11:59:58.459Z",
+    "versionId": "4133024a-23fe-4ea9-8e76-c8f9ca6e4332",
     "workflowId": "FHt8uKbBcixIWbWO",
     "nodes": [
       {
@@ -1272,13 +1712,13 @@
         "parameters": {
           "url": "={{ $json.source.feed_url }}",
           "options": {
+            "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}",
             "response": {
               "response": {
                 "responseFormat": "text"
               }
             },
-            "timeout": 30000,
-            "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
+            "timeout": 30000
           }
         },
         "id": "79792d0e-bcaf-4ab9-9147-08f3ef970407",
@@ -1327,8 +1767,8 @@
           "specifyHeaders": "json",
           "jsonHeaders": "={{ JSON.stringify($json.source.parser_config.headers || {}) }}",
           "options": {
-            "timeout": 30000,
-            "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
+            "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}",
+            "timeout": 30000
           }
         },
         "id": "3d0cd50a-feef-41f2-a744-20d39b4cb093",
@@ -1361,13 +1801,13 @@
         "parameters": {
           "url": "={{ $json.source.base_url }}",
           "options": {
+            "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}",
             "response": {
               "response": {
                 "responseFormat": "text"
               }
             },
-            "timeout": 30000,
-            "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
+            "timeout": 30000
           }
         },
         "id": "537b9077-bd28-4f2c-8978-ba5ada3f26ba",
@@ -1424,13 +1864,13 @@
         "parameters": {
           "url": "={{ $json.source.base_url }}",
           "options": {
+            "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}",
             "response": {
               "response": {
                 "responseFormat": "text"
               }
             },
-            "timeout": 30000,
-            "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}"
+            "timeout": 30000
           }
         },
         "id": "e6cbeaaa-36b2-4d32-b352-ee4ce1adab5f",
@@ -1481,8 +1921,8 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          912,
-          304
+          848,
+          320
         ]
       },
       {
@@ -1531,9 +1971,22 @@
           "jsonHeaders": "={{ JSON.stringify({ \"anthropic-version\": \"2023-06-01\", \"content-type\": \"application/json\" }) }}",
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 1500, temperature: 0, system: $('Classification prompt').first().json.system_prompt, messages: [{ role: 'user', content: `الجهة: ${$json.source.authority_ar}\\nالدولة المسجّلة للمصدر: ${$json.source.country}\\nالرابط: ${$json.source_url}\\nتاريخ النشر المستخرج من المصدر: ${$json.publication_date || 'غير متوفر'}\\n\\nالعنوان:\\n${$json.title_raw}\\n\\nالنص:\\n${$json.content_raw}` }] }) }}",
+          "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 1500, system: $('Classification prompt').first().json.system_prompt, messages: [{ role: 'user', content: `الجهة: ${$json.source.authority_ar}\\nالدولة المسجّلة للمصدر: ${$json.source.country}\\nالرابط: ${$json.source_url}\\nتاريخ النشر المستخرج من المصدر: ${$json.publication_date || 'غير متوفر'}\\n\\nالعنوان:\\n${$json.title_raw}\\n\\nالنص:\\n${$json.content_raw}` }] }) }}",
           "options": {
-            "timeout": 60000
+            "timeout": 60000,
+            "response": {
+              "response": {
+                "responseFormat": "json",
+                "fullResponse": true,
+                "neverError": true
+              }
+            },
+            "batching": {
+              "batch": {
+                "batchSize": 4,
+                "batchInterval": 1000
+              }
+            }
           }
         },
         "id": "cd12041f-9490-447d-94b2-30c6ae7009fa",
@@ -1541,12 +1994,9 @@
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
-          1120,
+          1184,
           304
         ],
-        "retryOnFail": true,
-        "maxTries": 3,
-        "waitBetweenTries": 2000,
         "credentials": {
           "httpHeaderAuth": {
             "id": "jtSVrGAaoOTVzEWT",
@@ -1581,7 +2031,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// Carries the RawItem alongside the AI response so the validator can pair\n// them. n8n keeps item order through the HTTP node, but pairing explicitly is\n// cheaper than relying on that.\nconst items = $('Normalise RawItem').all().map(i => i.json);\nreturn $input.all().map((entry, i) => ({ json: { ...entry.json, __item: items[i] } }));"
+          "jsCode": "// Carries the RawItem alongside the AI response so the validator can pair\n// them. The AI call now branches through a bounded retry graph (see\n// \"Retry AI call? (after attempt N)\"), so an item that needed a retry no\n// longer sits at the same array position as its RawItem — itemMatching\n// follows n8n's own pairedItem lineage back to the source item instead of\n// assuming position N in equals position N out.\nconst out = [];\nconst inputs = $input.all();\nfor (let i = 0; i < inputs.length; i++) {\n  const original = $('Continue after threshold').itemMatching(i).json;\n  out.push({ json: { ...inputs[i].json, __item: original } });\n}\nreturn out;\n"
         },
         "id": "7dbdba25-3c1c-4145-a98d-a87dc926b6a8",
         "name": "Pair with RawItem",
@@ -1594,7 +2044,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// Parses and validates the model's JSON. FAIL CLOSED.\n//\n// Anything malformed, incomplete, or outside the allowed enums is rejected\n// outright — never coerced, never defaulted. A coerced category would put a\n// confident wrong classification in a legal archive, which is worse than a gap.\n\nconst COUNTRY = ['SA','AE','KW','QA','BH','OM','GCC'];\nconst CATEGORY = ['tax','customs','employment','corporate','financial','capital_markets','banking','data_privacy','cybersecurity','competition','intellectual_property','litigation','licensing','real_estate','energy','healthcare','trade','general'];\nconst DOC_TYPE = ['law','royal_decree','ministerial_decision','executive_regulation','circular','regulatory_framework','official_notice','court_precedent','consultation_draft','other'];\nconst STATUS = ['enacted','effective','draft','amended','repealed','pending'];\n\nconst ISO_DATE = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst isDate = (v) => {\n  if (v === null || v === undefined || v === '') return true;\n  if (typeof v !== 'string' || !ISO_DATE.test(v)) return false;\n  const d = new Date(v + 'T00:00:00Z');\n  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0,10) === v;\n};\nconst strList = (v) => Array.isArray(v) && v.every(x => typeof x === 'string');\nconst nonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const item = entry.json.__item;\n  const response = entry.json;\n\n  const fail = (reason, detail) => out.push({ json: {\n    __item: item, __rejected: true, reason, detail: detail ? String(detail).slice(0,300) : null,\n  }});\n\n  // The Messages API returns content blocks; the text block carries the JSON.\n  const text = response?.content?.[0]?.text;\n  if (!nonEmpty(text)) { fail('ai_empty_response'); continue; }\n\n  let ai;\n  try {\n    ai = JSON.parse(text.trim());\n  } catch {\n    // One tolerated shape: the model wrapped the object in prose or a fence.\n    const m = text.match(/\\{[\\s\\S]*\\}/);\n    if (!m) { fail('ai_parse_failure', text); continue; }\n    try { ai = JSON.parse(m[0]); } catch { fail('ai_parse_failure', text); continue; }\n  }\n\n  if (!ai || typeof ai !== 'object' || Array.isArray(ai)) { fail('ai_not_an_object'); continue; }\n\n  if (!nonEmpty(ai.title_ar)) { fail('ai_invalid_output', 'title_ar'); continue; }\n  if (!nonEmpty(ai.summary_ar)) { fail('ai_invalid_output', 'summary_ar'); continue; }\n  if (!COUNTRY.includes(ai.country)) { fail('ai_invalid_output', 'country=' + ai.country); continue; }\n  if (!CATEGORY.includes(ai.category)) { fail('ai_invalid_output', 'category=' + ai.category); continue; }\n  if (!DOC_TYPE.includes(ai.document_type)) { fail('ai_invalid_output', 'document_type=' + ai.document_type); continue; }\n  if (!STATUS.includes(ai.legal_status)) { fail('ai_invalid_output', 'legal_status=' + ai.legal_status); continue; }\n  if (typeof ai.is_legal_update !== 'boolean') { fail('ai_invalid_output', 'is_legal_update'); continue; }\n  if (typeof ai.confidence !== 'number' || !Number.isFinite(ai.confidence) || ai.confidence < 0 || ai.confidence > 1) {\n    fail('ai_invalid_output', 'confidence=' + ai.confidence); continue;\n  }\n  if (!isDate(ai.effective_date)) { fail('ai_invalid_output', 'effective_date=' + ai.effective_date); continue; }\n  if (!isDate(ai.publication_date)) { fail('ai_invalid_output', 'publication_date=' + ai.publication_date); continue; }\n  if (ai.affected_entities !== undefined && !strList(ai.affected_entities)) { fail('ai_invalid_output', 'affected_entities'); continue; }\n  if (ai.keywords !== undefined && !strList(ai.keywords)) { fail('ai_invalid_output', 'keywords'); continue; }\n\n  out.push({ json: {\n    __item: item,\n    __rejected: false,\n    ai: {\n      title_ar: ai.title_ar.trim(),\n      summary_ar: ai.summary_ar.trim(),\n      country: ai.country,\n      category: ai.category,\n      document_type: ai.document_type,\n      legal_status: ai.legal_status,\n      is_legal_update: ai.is_legal_update,\n      confidence: ai.confidence,\n      publication_date: ai.publication_date || null,\n      effective_date: ai.effective_date || null,\n      affected_entities: (ai.affected_entities || []).slice(0, 20),\n      keywords: (ai.keywords || []).slice(0, 20),\n    },\n  }});\n}\n\nreturn out;"
+          "jsCode": "// Parses and validates the model's JSON. FAIL CLOSED.\n//\n// Anything malformed, incomplete, or outside the allowed enums is rejected\n// outright — never coerced, never defaulted. A coerced category would put a\n// confident wrong classification in a legal archive, which is worse than a gap.\n\nconst COUNTRY = ['SA','AE','KW','QA','BH','OM','GCC'];\nconst CATEGORY = ['tax','customs','employment','corporate','financial','capital_markets','banking','data_privacy','cybersecurity','competition','intellectual_property','litigation','licensing','real_estate','energy','healthcare','trade','general'];\nconst DOC_TYPE = ['law','royal_decree','ministerial_decision','executive_regulation','circular','regulatory_framework','official_notice','court_precedent','consultation_draft','other'];\nconst STATUS = ['enacted','effective','draft','amended','repealed','pending'];\n\nconst ISO_DATE = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst isDate = (v) => {\n  if (v === null || v === undefined || v === '') return true;\n  if (typeof v !== 'string' || !ISO_DATE.test(v)) return false;\n  const d = new Date(v + 'T00:00:00Z');\n  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0,10) === v;\n};\nconst strList = (v) => Array.isArray(v) && v.every(x => typeof x === 'string');\nconst nonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const item = entry.json.__item;\n  const response = entry.json;\n\n  const fail = (reason, detail) => out.push({ json: {\n    __item: item, __rejected: true, reason, detail: detail ? String(detail).slice(0,300) : null,\n  }});\n\n  // \"Classify with AI\" tags exhausted-retry HTTP failures instead of\n  // leaving them to fall through as a misleading ai_empty_response — a\n  // 529 that never got a response body is not the same failure as the\n  // model actually returning nothing.\n  if (response?.__aiError) {\n    fail(response.__aiFailureReason || 'ai_http_error', JSON.stringify(response.__aiDiagnostic || null));\n    continue;\n  }\n\n  // The Messages API may return a thinking block before the text block.\n  // Find the first actual text block instead of assuming content[0] is text.\n  const textBlock = Array.isArray(response?.content)\n    ? response.content.find(\n        (block) =>\n          block?.type === 'text' &&\n          typeof block.text === 'string'\n      )\n    : null;\n\n  const text = textBlock?.text || '';\n\n  // A response cut off by the token budget is not an empty response —\n  // report it as what it is so it doesn't get silently treated as \"the\n  // model returned nothing\" (which reads as a model/prompt problem when\n  // it's actually a budget problem).\n  if (response?.stop_reason === 'max_tokens') {\n    fail('ai_truncated_response', text || null);\n    continue;\n  }\n\n  if (!nonEmpty(text)) {\n    fail('ai_empty_response');\n    continue;\n  }\n\n  let ai;\n  try {\n    ai = JSON.parse(text.trim());\n  } catch {\n    // One tolerated shape: the model wrapped the object in prose or a fence.\n    const m = text.match(/\\{[\\s\\S]*\\}/);\n    if (!m) { fail('ai_parse_failure', text); continue; }\n    try { ai = JSON.parse(m[0]); } catch { fail('ai_parse_failure', text); continue; }\n  }\n\n  if (!ai || typeof ai !== 'object' || Array.isArray(ai)) { fail('ai_not_an_object'); continue; }\n\n  if (!nonEmpty(ai.title_ar)) { fail('ai_invalid_output', 'title_ar'); continue; }\n  if (!nonEmpty(ai.summary_ar)) { fail('ai_invalid_output', 'summary_ar'); continue; }\n  if (!COUNTRY.includes(ai.country)) { fail('ai_invalid_output', 'country=' + ai.country); continue; }\n  if (!CATEGORY.includes(ai.category)) { fail('ai_invalid_output', 'category=' + ai.category); continue; }\n  if (!DOC_TYPE.includes(ai.document_type)) { fail('ai_invalid_output', 'document_type=' + ai.document_type); continue; }\n  if (!STATUS.includes(ai.legal_status)) { fail('ai_invalid_output', 'legal_status=' + ai.legal_status); continue; }\n  if (typeof ai.is_legal_update !== 'boolean') { fail('ai_invalid_output', 'is_legal_update'); continue; }\n  if (typeof ai.confidence !== 'number' || !Number.isFinite(ai.confidence) || ai.confidence < 0 || ai.confidence > 1) {\n    fail('ai_invalid_output', 'confidence=' + ai.confidence); continue;\n  }\n  if (!isDate(ai.effective_date)) { fail('ai_invalid_output', 'effective_date=' + ai.effective_date); continue; }\n  if (!isDate(ai.publication_date)) { fail('ai_invalid_output', 'publication_date=' + ai.publication_date); continue; }\n  if (ai.affected_entities !== undefined && !strList(ai.affected_entities)) { fail('ai_invalid_output', 'affected_entities'); continue; }\n  if (ai.keywords !== undefined && !strList(ai.keywords)) { fail('ai_invalid_output', 'keywords'); continue; }\n\n  out.push({ json: {\n    __item: item,\n    __rejected: false,\n    ai: {\n      title_ar: ai.title_ar.trim(),\n      summary_ar: ai.summary_ar.trim(),\n      country: ai.country,\n      category: ai.category,\n      document_type: ai.document_type,\n      legal_status: ai.legal_status,\n      is_legal_update: ai.is_legal_update,\n      confidence: ai.confidence,\n      publication_date: ai.publication_date || null,\n      effective_date: ai.effective_date || null,\n      affected_entities: (ai.affected_entities || []).slice(0, 20),\n      keywords: (ai.keywords || []).slice(0, 20),\n    },\n  }});\n}\n\nreturn out;\n"
         },
         "id": "081721b7-6539-42f3-a272-71bf53516dc5",
         "name": "Validate AI output",
@@ -1622,8 +2072,7 @@
         "parameters": {
           "type": "SHA256",
           "value": "={{ $json.hash_input || 'skipped' }}",
-          "dataPropertyName": "content_hash",
-          "encoding": "hex"
+          "dataPropertyName": "content_hash"
         },
         "id": "0cfdb2cb-f293-4288-bba3-6fb6a2501b11",
         "name": "SHA256 content hash",
@@ -1664,10 +2113,10 @@
             "attemptToConvertTypes": false,
             "convertFieldsToString": true
           },
+          "mode": "each",
           "options": {
             "waitForSubWorkflow": true
-          },
-          "mode": "each"
+          }
         },
         "id": "249c86c5-e456-4706-a3b2-31c36ffae3ce",
         "name": "Publishing Gate",
@@ -1751,7 +2200,7 @@
         "typeVersion": 2,
         "position": [
           1200,
-          460
+          464
         ]
       },
       {
@@ -1776,8 +2225,8 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          1200,
-          160
+          1232,
+          112
         ]
       },
       {
@@ -1821,6 +2270,279 @@
         "position": [
           -16,
           480
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Reads the full-response wrapper ({statusCode, headers, body}) from the\n// preceding \"Classify with AI\" HTTP call (configured with neverError +\n// fullResponse, so nothing throws — every outcome, success or failure,\n// arrives here as a normal item). Classifies success / permanent failure /\n// retryable failure, and — for a retryable failure that still has attempts\n// left — computes the exponential-backoff delay for the next round,\n// honouring Retry-After when Anthropic sends one.\n//\n// Attempt 1 of 3.\n\nconst ATTEMPT = 1;\nconst IS_FINAL_ATTEMPT = false;\nconst BASE_DELAY_MS = 1000;\nconst MAX_DELAY_MS = 15000;\nconst RETRYABLE_STATUS = new Set([429, 500, 502, 503, 529]);\nconst PERMANENT_STATUS = new Set([400, 401, 403]);\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const res = entry.json || {};\n  const status = typeof res.statusCode === 'number' ? res.statusCode : null;\n  const headers = res.headers || {};\n  const body = res.body;\n\n  if (status !== null && status >= 200 && status < 300) {\n    out.push({ json: body });\n    continue;\n  }\n\n  const permanent = status !== null && PERMANENT_STATUS.has(status);\n  const retryable = !permanent && (status === null || RETRYABLE_STATUS.has(status));\n\n  const anthropicError = body && typeof body === 'object' ? body.error : null;\n  const diagnostic = {\n    status,\n    anthropicErrorType: anthropicError?.type ?? null,\n    message: String(anthropicError?.message || res.errorMessage || '').slice(0, 300),\n  };\n\n  let reason = 'ai_http_error';\n  if (status === 429) reason = 'ai_rate_limited';\n  else if (status === 529) reason = 'ai_overloaded';\n  else if (status === null) reason = 'ai_timeout';\n\n  if (!retryable || IS_FINAL_ATTEMPT) {\n    out.push({ json: { __aiError: true, __aiFailureReason: reason, __aiDiagnostic: diagnostic } });\n    continue;\n  }\n\n  const retryAfterRaw = headers['retry-after'] ?? headers['Retry-After'];\n  const retryAfterSeconds = retryAfterRaw !== undefined ? Number(retryAfterRaw) : NaN;\n  const retryAfterMs = Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : null;\n\n  let delay = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** (ATTEMPT - 1));\n  if (retryAfterMs !== null) delay = Math.max(delay, Math.min(retryAfterMs, MAX_DELAY_MS));\n\n  out.push({ json: { __aiRetry: true, __aiRetryDelayMs: delay, __aiDiagnostic: diagnostic } });\n}\n\nreturn out;\n"
+        },
+        "id": "4aab7e38-30bf-4c7c-9ea6-978a43fec7b9",
+        "name": "Interpret AI response (attempt 1)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1344,
+          304
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "version": 2
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.__aiRetry }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "920f57c6-d0b5-47b0-87e3-3ed98a10f967",
+        "name": "Retry AI call? (after attempt 1)",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1504,
+          304
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// The Wait node's dynamic delay expression is evaluated once per node\n// execution, not once per item — so every retryable item in this round\n// must carry the SAME delay value, or whichever item n8n reads for the\n// expression wins arbitrarily for the rest. Stamping the max across the\n// round keeps every item's own backoff/Retry-After honoured: nothing\n// retries before it was told to.\n\nconst items = $input.all();\nconst maxDelay = items.reduce((acc, entry) => Math.max(acc, entry.json.__aiRetryDelayMs || 0), 1000);\nreturn items.map((entry) => ({ json: { ...entry.json, __aiRoundDelayMs: maxDelay } }));\n"
+        },
+        "id": "a7af6848-df37-41eb-a379-895b19b96adb",
+        "name": "Compute AI retry delay (round 1)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1664,
+          184
+        ]
+      },
+      {
+        "parameters": {
+          "resume": "timeInterval",
+          "unit": "seconds",
+          "amount": "={{ Math.ceil($json.__aiRoundDelayMs / 1000) }}"
+        },
+        "id": "3071b698-4a92-45c0-ae77-8466af8d603a",
+        "name": "Wait before AI retry 1",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          1824,
+          184
+        ],
+        "webhookId": "e2680468-4ff2-4103-8975-f05de3120130"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "specifyHeaders": "json",
+          "jsonHeaders": "={{ JSON.stringify({ \"anthropic-version\": \"2023-06-01\", \"content-type\": \"application/json\" }) }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 1500, system: $('Classification prompt').first().json.system_prompt, messages: [{ role: 'user', content: `الجهة: ${$json.source.authority_ar}\\nالدولة المسجّلة للمصدر: ${$json.source.country}\\nالرابط: ${$json.source_url}\\nتاريخ النشر المستخرج من المصدر: ${$json.publication_date || 'غير متوفر'}\\n\\nالعنوان:\\n${$json.title_raw}\\n\\nالنص:\\n${$json.content_raw}` }] }) }}",
+          "options": {
+            "timeout": 60000,
+            "response": {
+              "response": {
+                "responseFormat": "json",
+                "fullResponse": true,
+                "neverError": true
+              }
+            },
+            "batching": {
+              "batch": {
+                "batchSize": 4,
+                "batchInterval": 1000
+              }
+            }
+          }
+        },
+        "id": "95483162-92fa-4ea6-b6e3-0cbc7eadf931",
+        "name": "Classify with AI (retry 2)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1984,
+          184
+        ],
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "jtSVrGAaoOTVzEWT",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Reads the full-response wrapper ({statusCode, headers, body}) from the\n// preceding \"Classify with AI\" HTTP call (configured with neverError +\n// fullResponse, so nothing throws — every outcome, success or failure,\n// arrives here as a normal item). Classifies success / permanent failure /\n// retryable failure, and — for a retryable failure that still has attempts\n// left — computes the exponential-backoff delay for the next round,\n// honouring Retry-After when Anthropic sends one.\n//\n// Attempt 2 of 3.\n\nconst ATTEMPT = 2;\nconst IS_FINAL_ATTEMPT = false;\nconst BASE_DELAY_MS = 1000;\nconst MAX_DELAY_MS = 15000;\nconst RETRYABLE_STATUS = new Set([429, 500, 502, 503, 529]);\nconst PERMANENT_STATUS = new Set([400, 401, 403]);\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const res = entry.json || {};\n  const status = typeof res.statusCode === 'number' ? res.statusCode : null;\n  const headers = res.headers || {};\n  const body = res.body;\n\n  if (status !== null && status >= 200 && status < 300) {\n    out.push({ json: body });\n    continue;\n  }\n\n  const permanent = status !== null && PERMANENT_STATUS.has(status);\n  const retryable = !permanent && (status === null || RETRYABLE_STATUS.has(status));\n\n  const anthropicError = body && typeof body === 'object' ? body.error : null;\n  const diagnostic = {\n    status,\n    anthropicErrorType: anthropicError?.type ?? null,\n    message: String(anthropicError?.message || res.errorMessage || '').slice(0, 300),\n  };\n\n  let reason = 'ai_http_error';\n  if (status === 429) reason = 'ai_rate_limited';\n  else if (status === 529) reason = 'ai_overloaded';\n  else if (status === null) reason = 'ai_timeout';\n\n  if (!retryable || IS_FINAL_ATTEMPT) {\n    out.push({ json: { __aiError: true, __aiFailureReason: reason, __aiDiagnostic: diagnostic } });\n    continue;\n  }\n\n  const retryAfterRaw = headers['retry-after'] ?? headers['Retry-After'];\n  const retryAfterSeconds = retryAfterRaw !== undefined ? Number(retryAfterRaw) : NaN;\n  const retryAfterMs = Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : null;\n\n  let delay = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** (ATTEMPT - 1));\n  if (retryAfterMs !== null) delay = Math.max(delay, Math.min(retryAfterMs, MAX_DELAY_MS));\n\n  out.push({ json: { __aiRetry: true, __aiRetryDelayMs: delay, __aiDiagnostic: diagnostic } });\n}\n\nreturn out;\n"
+        },
+        "id": "9248d11f-c2c6-4a41-9e92-e946bf593af1",
+        "name": "Interpret AI response (attempt 2)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2144,
+          184
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "version": 2
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.__aiRetry }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "22e6fea5-abfb-4cfe-b7c3-884fd50618dd",
+        "name": "Retry AI call? (after attempt 2)",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          2304,
+          184
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// The Wait node's dynamic delay expression is evaluated once per node\n// execution, not once per item — so every retryable item in this round\n// must carry the SAME delay value, or whichever item n8n reads for the\n// expression wins arbitrarily for the rest. Stamping the max across the\n// round keeps every item's own backoff/Retry-After honoured: nothing\n// retries before it was told to.\n\nconst items = $input.all();\nconst maxDelay = items.reduce((acc, entry) => Math.max(acc, entry.json.__aiRetryDelayMs || 0), 1000);\nreturn items.map((entry) => ({ json: { ...entry.json, __aiRoundDelayMs: maxDelay } }));\n"
+        },
+        "id": "2f566617-3f17-4f36-a6f3-f5cfead80e74",
+        "name": "Compute AI retry delay (round 2)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2464,
+          64
+        ]
+      },
+      {
+        "parameters": {
+          "resume": "timeInterval",
+          "unit": "seconds",
+          "amount": "={{ Math.ceil($json.__aiRoundDelayMs / 1000) }}"
+        },
+        "id": "555093ad-fea5-4615-9d95-c54d4eb5296b",
+        "name": "Wait before AI retry 2",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          2624,
+          64
+        ],
+        "webhookId": "163c2e96-1dbc-4267-b1ea-55d642d6237e"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "specifyHeaders": "json",
+          "jsonHeaders": "={{ JSON.stringify({ \"anthropic-version\": \"2023-06-01\", \"content-type\": \"application/json\" }) }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 1500, system: $('Classification prompt').first().json.system_prompt, messages: [{ role: 'user', content: `الجهة: ${$json.source.authority_ar}\\nالدولة المسجّلة للمصدر: ${$json.source.country}\\nالرابط: ${$json.source_url}\\nتاريخ النشر المستخرج من المصدر: ${$json.publication_date || 'غير متوفر'}\\n\\nالعنوان:\\n${$json.title_raw}\\n\\nالنص:\\n${$json.content_raw}` }] }) }}",
+          "options": {
+            "timeout": 60000,
+            "response": {
+              "response": {
+                "responseFormat": "json",
+                "fullResponse": true,
+                "neverError": true
+              }
+            },
+            "batching": {
+              "batch": {
+                "batchSize": 4,
+                "batchInterval": 1000
+              }
+            }
+          }
+        },
+        "id": "3d01d6e9-7fb2-454a-aba1-6b732f91dc32",
+        "name": "Classify with AI (retry 3)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2784,
+          64
+        ],
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "jtSVrGAaoOTVzEWT",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Reads the full-response wrapper ({statusCode, headers, body}) from the\n// preceding \"Classify with AI\" HTTP call (configured with neverError +\n// fullResponse, so nothing throws — every outcome, success or failure,\n// arrives here as a normal item). Classifies success / permanent failure /\n// retryable failure, and — for a retryable failure that still has attempts\n// left — computes the exponential-backoff delay for the next round,\n// honouring Retry-After when Anthropic sends one.\n//\n// Attempt 3 of 3 — final attempt, no further retry.\n\nconst ATTEMPT = 3;\nconst IS_FINAL_ATTEMPT = true;\nconst BASE_DELAY_MS = 1000;\nconst MAX_DELAY_MS = 15000;\nconst RETRYABLE_STATUS = new Set([429, 500, 502, 503, 529]);\nconst PERMANENT_STATUS = new Set([400, 401, 403]);\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const res = entry.json || {};\n  const status = typeof res.statusCode === 'number' ? res.statusCode : null;\n  const headers = res.headers || {};\n  const body = res.body;\n\n  if (status !== null && status >= 200 && status < 300) {\n    out.push({ json: body });\n    continue;\n  }\n\n  const permanent = status !== null && PERMANENT_STATUS.has(status);\n  const retryable = !permanent && (status === null || RETRYABLE_STATUS.has(status));\n\n  const anthropicError = body && typeof body === 'object' ? body.error : null;\n  const diagnostic = {\n    status,\n    anthropicErrorType: anthropicError?.type ?? null,\n    message: String(anthropicError?.message || res.errorMessage || '').slice(0, 300),\n  };\n\n  let reason = 'ai_http_error';\n  if (status === 429) reason = 'ai_rate_limited';\n  else if (status === 529) reason = 'ai_overloaded';\n  else if (status === null) reason = 'ai_timeout';\n\n  if (!retryable || IS_FINAL_ATTEMPT) {\n    out.push({ json: { __aiError: true, __aiFailureReason: reason, __aiDiagnostic: diagnostic } });\n    continue;\n  }\n\n  const retryAfterRaw = headers['retry-after'] ?? headers['Retry-After'];\n  const retryAfterSeconds = retryAfterRaw !== undefined ? Number(retryAfterRaw) : NaN;\n  const retryAfterMs = Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : null;\n\n  let delay = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** (ATTEMPT - 1));\n  if (retryAfterMs !== null) delay = Math.max(delay, Math.min(retryAfterMs, MAX_DELAY_MS));\n\n  out.push({ json: { __aiRetry: true, __aiRetryDelayMs: delay, __aiDiagnostic: diagnostic } });\n}\n\nreturn out;\n"
+        },
+        "id": "719a5b69-e632-438f-934c-b80eed5629bf",
+        "name": "Interpret AI response (attempt 3 — final)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2944,
+          64
+        ]
+      },
+      {
+        "parameters": {
+          "numberInputs": 2
+        },
+        "id": "2f5e1d17-8f83-417d-950c-4f838b8fa907",
+        "name": "Merge AI results (1)",
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3,
+        "position": [
+          2304,
+          304
+        ]
+      },
+      {
+        "parameters": {
+          "numberInputs": 2
+        },
+        "id": "25c52d85-8331-4fa9-81ab-b1b21dd47632",
+        "name": "Merge AI results (2)",
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3,
+        "position": [
+          3104,
+          304
         ]
       }
     ],
@@ -2043,7 +2765,7 @@
         "main": [
           [
             {
-              "node": "Pair with RawItem",
+              "node": "Interpret AI response (attempt 1)",
               "type": "main",
               "index": 0
             }
@@ -2228,6 +2950,163 @@
             }
           ]
         ]
+      },
+      "Interpret AI response (attempt 1)": {
+        "main": [
+          [
+            {
+              "node": "Retry AI call? (after attempt 1)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Retry AI call? (after attempt 1)": {
+        "main": [
+          [
+            {
+              "node": "Compute AI retry delay (round 1)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Merge AI results (1)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Compute AI retry delay (round 1)": {
+        "main": [
+          [
+            {
+              "node": "Wait before AI retry 1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait before AI retry 1": {
+        "main": [
+          [
+            {
+              "node": "Classify with AI (retry 2)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Classify with AI (retry 2)": {
+        "main": [
+          [
+            {
+              "node": "Interpret AI response (attempt 2)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Interpret AI response (attempt 2)": {
+        "main": [
+          [
+            {
+              "node": "Retry AI call? (after attempt 2)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Retry AI call? (after attempt 2)": {
+        "main": [
+          [
+            {
+              "node": "Compute AI retry delay (round 2)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Merge AI results (1)",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Compute AI retry delay (round 2)": {
+        "main": [
+          [
+            {
+              "node": "Wait before AI retry 2",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait before AI retry 2": {
+        "main": [
+          [
+            {
+              "node": "Classify with AI (retry 3)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Classify with AI (retry 3)": {
+        "main": [
+          [
+            {
+              "node": "Interpret AI response (attempt 3 — final)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Interpret AI response (attempt 3 — final)": {
+        "main": [
+          [
+            {
+              "node": "Merge AI results (2)",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Merge AI results (1)": {
+        "main": [
+          [
+            {
+              "node": "Merge AI results (2)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge AI results (2)": {
+        "main": [
+          [
+            {
+              "node": "Pair with RawItem",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Asayel Qaid",
@@ -2236,10 +3115,10 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-08-03T11:19:16.439Z",
-        "id": 447,
+        "createdAt": "2026-08-04T11:59:58.558Z",
+        "id": 463,
         "workflowId": "FHt8uKbBcixIWbWO",
-        "versionId": "cb9a92ff-556d-4ea7-a60d-29c1720c9016",
+        "versionId": "4133024a-23fe-4ea9-8e76-c8f9ca6e4332",
         "event": "activated",
         "userId": "c6441430-2935-43cb-a7bd-db0da8ae18ce"
       }
