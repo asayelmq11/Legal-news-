@@ -3,6 +3,7 @@
 import { useFormStatus } from 'react-dom'
 
 import type { ActionState } from '@/lib/actions/state'
+import { BUTTON, CONTROL } from '@/components/ui'
 import { cn } from '@/lib/utils'
 
 export function SubmitButton({
@@ -19,13 +20,6 @@ export function SubmitButton({
 }) {
   const { pending } = useFormStatus()
 
-  const styles = {
-    primary: 'bg-(--color-brand) text-white hover:bg-(--color-brand-hover)',
-    ghost:
-      'border border-(--color-border-strong) text-(--color-ink-muted) hover:bg-(--color-surface-sunken)',
-    danger: 'bg-(--color-danger) text-white hover:opacity-90',
-  }[variant]
-
   return (
     <button
       type="submit"
@@ -33,10 +27,7 @@ export function SubmitButton({
       onClick={(e) => {
         if (confirm && !window.confirm(confirm)) e.preventDefault()
       }}
-      className={cn(
-        'rounded-md px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60',
-        styles,
-      )}
+      className={BUTTON[variant]}
     >
       {pending ? pendingLabel : children}
     </button>
@@ -49,7 +40,7 @@ export function ActionMessage({ state }: { state: ActionState }) {
     <p
       role="status"
       className={cn(
-        'rounded-md px-3 py-2 text-sm',
+        'rounded-(--radius-control) px-3 py-2 text-sm leading-relaxed',
         state.ok
           ? 'bg-(--color-ok-subtle) text-(--color-ok)'
           : 'bg-(--color-danger-subtle) text-(--color-danger)',
@@ -85,5 +76,4 @@ export function Field({
   )
 }
 
-export const inputClass =
-  'w-full rounded-md border border-(--color-border-strong) bg-(--color-surface) px-3 py-2 text-sm outline-none focus:border-(--color-brand)'
+export const inputClass = cn(CONTROL, 'w-full')

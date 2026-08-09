@@ -58,7 +58,7 @@ export function SettingEditor({
       <p className="text-xs leading-relaxed text-(--color-ink-muted)">{def.descriptionAr}</p>
 
       {def.failClosed ? (
-        <p className="rounded-md bg-(--color-warn-subtle) px-3 py-2 text-xs leading-relaxed text-(--color-warn)">
+        <p className="rounded-(--radius-control) bg-(--color-warn-subtle) px-3 py-2 text-xs leading-relaxed text-(--color-warn)">
           {def.failClosedNoteAr}
         </p>
       ) : null}

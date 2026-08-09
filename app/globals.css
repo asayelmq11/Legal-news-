@@ -18,6 +18,7 @@
   --color-brand: oklch(42% 0.09 245);
   --color-brand-hover: oklch(36% 0.095 245);
   --color-brand-subtle: oklch(95% 0.02 245);
+  --color-brand-strong: oklch(30% 0.08 245);
 
   /* Health and status signalling. */
   --color-ok: oklch(52% 0.11 155);
@@ -29,7 +30,15 @@
 
   --font-sans: 'IBM Plex Sans Arabic', 'Noto Sans Arabic', 'Segoe UI', system-ui, sans-serif;
 
+  --radius-control: 0.5rem;
   --radius-card: 0.625rem;
+  --radius-lg: 0.875rem;
+
+  /* A single restrained shadow, used sparingly — for raised surfaces that sit
+     above the page (menus, the refresh confirmation), never for ordinary cards. */
+  --shadow-raised: 0 1px 2px oklch(24% 0.012 260 / 0.04), 0 4px 16px oklch(24% 0.012 260 / 0.06);
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
 @layer base {
@@ -59,5 +68,26 @@
 
   ::selection {
     background-color: var(--color-brand-subtle);
+  }
+
+  /*
+   * A calm, fast default for anything that opts into `transition-*` utilities,
+   * so hover/focus/pressed states feel like one system rather than each
+   * component picking its own easing. Respects reduced-motion globally rather
+   * than requiring every component to remember to.
+   */
+  * {
+    transition-timing-function: var(--ease-standard);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

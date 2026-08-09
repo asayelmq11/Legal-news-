@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+import { ChevronIcon } from '@/components/icons'
 import { buildArchiveQuery, MAX_PAGE, type ArchiveFilters } from '@/lib/updates/filters'
 import { cn } from '@/lib/utils'
 
@@ -30,9 +31,9 @@ export function ArchivePagination({
   const atCap = pageCount > MAX_PAGE
 
   return (
-    <nav aria-label="ترقيم الصفحات" className="flex flex-col items-center gap-3 pt-2">
+    <nav aria-label="ترقيم الصفحات" className="flex flex-col items-center gap-3 border-t border-(--color-border) pt-6">
       <ul className="flex flex-wrap items-center justify-center gap-1">
-        <PageLink filters={filters} to={page - 1} disabled={page <= 1} label="السابق" />
+        <PageLink filters={filters} to={page - 1} disabled={page <= 1} label="السابق" icon="prev" />
 
         {start > 1 ? (
           <>
@@ -57,11 +58,13 @@ export function ArchivePagination({
           to={page + 1}
           disabled={page >= pageCount}
           label="التالي"
+          icon="next"
         />
       </ul>
 
       <p className="text-xs text-(--color-ink-subtle)">
-        صفحة {page} من {pageCount} · {total} تحديث
+        صفحة <span className="font-medium text-(--color-ink-muted)">{page}</span> من {pageCount} ·{' '}
+        {total} تحديث
       </p>
 
       {atCap ? (
@@ -79,20 +82,30 @@ function PageLink({
   label,
   current = false,
   disabled = false,
+  icon,
 }: {
   filters: ArchiveFilters
   to: number
   label: string
   current?: boolean
   disabled?: boolean
+  icon?: 'prev' | 'next'
 }) {
-  const base = 'block rounded-md px-3 py-1.5 text-sm font-medium'
+  const base = 'flex h-9 min-w-9 items-center justify-center gap-1 rounded-(--radius-control) px-3 text-sm font-medium'
+
+  const content = (
+    <>
+      {icon === 'prev' ? <ChevronIcon className="size-3.5 rotate-180" /> : null}
+      {label}
+      {icon === 'next' ? <ChevronIcon className="size-3.5" /> : null}
+    </>
+  )
 
   if (disabled) {
     return (
       <li>
         <span className={cn(base, 'cursor-not-allowed text-(--color-ink-subtle) opacity-50')}>
-          {label}
+          {content}
         </span>
       </li>
     )
@@ -105,12 +118,13 @@ function PageLink({
         aria-current={current ? 'page' : undefined}
         className={cn(
           base,
+          'transition-colors',
           current
             ? 'bg-(--color-brand) text-white'
             : 'text-(--color-ink-muted) hover:bg-(--color-surface-sunken) hover:text-(--color-ink)',
         )}
       >
-        {label}
+        {content}
       </Link>
     </li>
   )

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 
+import { AuthShell } from '@/components/ui'
 import { RecoveryForm } from './recovery-form'
 
 export const metadata: Metadata = { title: 'تعيين كلمة مرور جديدة' }
@@ -18,17 +19,11 @@ export const metadata: Metadata = { title: 'تعيين كلمة مرور جدي�
  */
 export default function UpdatePasswordPage() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-16">
-      <div className="space-y-6 rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-8">
-        <header className="space-y-2 text-center">
-          <h1 className="text-xl font-bold text-(--color-ink)">تعيين كلمة مرور جديدة</h1>
-          <p className="text-sm text-(--color-ink-muted)">
-            اختر كلمة مرور جديدة لحسابك في منصة الرصد القانوني
-          </p>
-        </header>
-
-        <RecoveryForm />
-      </div>
-    </main>
+    <AuthShell
+      title="تعيين كلمة مرور جديدة"
+      subtitle="اختر كلمة مرور جديدة لحسابك في منصة الرصد القانوني"
+    >
+      <RecoveryForm />
+    </AuthShell>
   )
 }

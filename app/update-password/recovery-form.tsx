@@ -4,10 +4,13 @@ import Link from 'next/link'
 import { useActionState, useEffect, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 
+import { PasswordField } from '@/components/password-field'
+import { BUTTON } from '@/components/ui'
 import { updatePassword, type UpdatePasswordState } from '@/lib/auth/actions'
 import { PASSWORD_MIN, describePasswordProblem } from '@/lib/auth/password'
 import { parseRecoveryFragment, recoveryErrorMessage } from '@/lib/auth/recovery'
 import { createClient } from '@/lib/supabase/client'
+import { cn } from '@/lib/utils'
 
 const INITIAL: UpdatePasswordState = { status: 'idle' }
 
@@ -92,7 +95,15 @@ export function RecoveryForm() {
   }, [])
 
   if (gate.phase === 'checking') {
-    return <p className="text-center text-sm text-(--color-ink-muted)">جارٍ التحقق من الرابط…</p>
+    return (
+      <p className="flex items-center justify-center gap-2 py-2 text-sm text-(--color-ink-muted)">
+        <span
+          aria-hidden="true"
+          className="size-3.5 animate-spin rounded-full border-2 border-(--color-border-strong) border-t-(--color-brand)"
+        />
+        جارٍ التحقق من الرابط…
+      </p>
+    )
   }
 
   if (gate.phase === 'rejected') {
@@ -112,14 +123,11 @@ function Rejected({ message }: { message: string }) {
     <div className="space-y-4">
       <p
         role="alert"
-        className="rounded-md border border-(--color-danger) bg-(--color-danger-subtle) px-3 py-2 text-sm leading-relaxed text-(--color-danger)"
+        className="rounded-(--radius-control) border border-(--color-danger) bg-(--color-danger-subtle) px-3 py-2 text-sm leading-relaxed text-(--color-danger)"
       >
         {message}
       </p>
-      <Link
-        href="/login"
-        className="block text-center text-sm font-medium text-(--color-brand) hover:underline"
-      >
+      <Link href="/login" className={cn(BUTTON.ghost, 'w-full')}>
         العودة إلى تسجيل الدخول
       </Link>
     </div>
@@ -142,7 +150,7 @@ function PasswordFields({
 
   return (
     <form action={formAction} className="space-y-4">
-      <Field
+      <PasswordField
         id="password"
         name="password"
         label="كلمة المرور الجديدة"
@@ -150,7 +158,7 @@ function PasswordFields({
         value={password}
         onChange={(event) => setPassword(event.target.value)}
       />
-      <Field
+      <PasswordField
         id="confirm"
         name="confirm"
         label="تأكيد كلمة المرور"
@@ -172,7 +180,7 @@ function PasswordFields({
       {state.status === 'failed' ? (
         <p
           role="alert"
-          className="rounded-md border border-(--color-danger) bg-(--color-danger-subtle) px-3 py-2 text-sm leading-relaxed text-(--color-danger)"
+          className="rounded-(--radius-control) border border-(--color-danger) bg-(--color-danger-subtle) px-3 py-2 text-sm leading-relaxed text-(--color-danger)"
         >
           {state.error}
         </p>
@@ -186,34 +194,8 @@ function PasswordFields({
 function SubmitButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus()
   return (
-    <button
-      type="submit"
-      disabled={pending || disabled}
-      className="w-full rounded-md bg-(--color-brand) px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-(--color-brand-hover) disabled:opacity-60"
-    >
+    <button type="submit" disabled={pending || disabled} className={cn(BUTTON.primary, 'w-full')}>
       {pending ? 'جارٍ الحفظ…' : 'حفظ كلمة المرور'}
     </button>
-  )
-}
-
-function Field({
-  id,
-  label,
-  ...props
-}: { id: string; label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="block text-sm font-medium text-(--color-ink)">
-        {label}
-      </label>
-      <input
-        id={id}
-        type="password"
-        dir="ltr"
-        required
-        className="w-full rounded-md border border-(--color-border-strong) bg-(--color-surface) px-3 py-2 text-sm text-(--color-ink) outline-none focus:border-(--color-brand)"
-        {...props}
-      />
-    </div>
   )
 }

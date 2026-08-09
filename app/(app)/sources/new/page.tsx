@@ -1,6 +1,5 @@
-import Link from 'next/link'
-
 import { SourceForm } from '@/components/admin/source-form'
+import { BackLink } from '@/components/ui'
 import { requireAdmin } from '@/lib/auth/session'
 
 export const metadata = { title: 'إضافة مصدر' }
@@ -10,7 +9,7 @@ export default async function NewSourcePage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <nav className="text-sm">
-        <Link href="/sources" className="text-(--color-brand) hover:underline">← المصادر</Link>
+        <BackLink href="/sources">المصادر</BackLink>
       </nav>
       <header>
         <h1 className="text-2xl font-bold text-(--color-ink)">إضافة مصدر</h1>

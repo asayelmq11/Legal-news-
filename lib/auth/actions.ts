@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { z } from 'zod'
 
 import {
@@ -258,6 +258,75 @@ export async function updatePassword(
 
   revalidatePath('/', 'layout')
   redirect('/login?reset=1')
+}
+
+export type RequestResetState =
+  | { status: 'idle' }
+  | { status: 'sent' }
+  | { status: 'failed'; error: string }
+
+const requestResetSchema = z.object({
+  email: z.email({ error: 'صيغة البريد الإلكتروني غير صحيحة' }),
+})
+
+/**
+ * Derives the origin `resetPasswordForEmail` needs for `redirectTo`, from the
+ * request's own Host header rather than a hard-coded env var — there isn't one
+ * in this app, and this keeps the link correct across environments (local,
+ * preview, production) without adding one.
+ */
+async function currentOrigin(): Promise<string> {
+  const h = await headers()
+  const host = h.get('x-forwarded-host') ?? h.get('host')
+  const proto = h.get('x-forwarded-proto') ?? 'https'
+  return host ? `${proto}://${host}` : ''
+}
+
+/**
+ * Sends the existing Supabase recovery email — the one whose link lands on
+ * /update-password and is handled entirely by RecoveryForm/updatePassword
+ * above. This action only asks Supabase to send it; it changes nothing about
+ * how that link is consumed.
+ *
+ * Always resolves to the same `sent` state regardless of whether the address
+ * belongs to an account, or whether Supabase accepted the request — the same
+ * reasoning as CREDENTIALS_REJECTED in signIn(): a form that answers
+ * differently for a registered address than an unregistered one lets anyone
+ * enumerate who works in the Legal Department. A genuine operator problem
+ * (misconfiguration, rate limiting) is logged server-side instead of shown.
+ */
+export async function requestPasswordReset(
+  _prev: RequestResetState,
+  formData: FormData,
+): Promise<RequestResetState> {
+  const parsed = requestResetSchema.safeParse({ email: formData.get('email') })
+
+  if (!parsed.success) {
+    return { status: 'failed', error: parsed.error.issues[0]?.message ?? 'بريد إلكتروني غير صالح' }
+  }
+
+  const supabase = await createClient()
+  const origin = await currentOrigin()
+
+  const { error } = await supabase.auth.resetPasswordForEmail(
+    parsed.data.email.toLowerCase(),
+    origin ? { redirectTo: `${origin}/update-password` } : undefined,
+  )
+
+  if (error) {
+    const detail = sanitizeAuthError(error)
+    authDebug('requestPasswordReset', {
+      name: detail.name,
+      code: detail.code,
+      status: detail.status ?? 'none',
+    })
+    console.error(
+      `[auth] password reset request rejected: name=${detail.name} code=${detail.code} ` +
+        `status=${detail.status ?? 'none'} message="${detail.message}"`,
+    )
+  }
+
+  return { status: 'sent' }
 }
 
 export async function signOut(): Promise<never> {

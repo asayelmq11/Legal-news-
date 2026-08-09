@@ -8,6 +8,8 @@ import {
   DocumentTypeBadge,
   LegalStatusBadge,
 } from '@/components/badges'
+import { ExternalLinkIcon } from '@/components/icons'
+import { BackLink, BUTTON } from '@/components/ui'
 import { requireActiveUser } from '@/lib/auth/session'
 import { getArchiveItem } from '@/lib/queries/updates'
 import { LINK_REJECTION_LABELS_AR, verifySourceLink } from '@/lib/updates/links'
@@ -40,11 +42,9 @@ export default async function UpdateDetailPage({
   const link = verifySourceLink(item.source_url, item.sources?.allowed_domains)
 
   return (
-    <article className="mx-auto max-w-3xl space-y-8">
+    <article className="mx-auto max-w-3xl space-y-10">
       <nav className="text-sm">
-        <Link href="/updates" className="text-(--color-brand) hover:underline">
-          ← العودة إلى الأرشيف
-        </Link>
+        <BackLink href="/updates">العودة إلى الأرشيف</BackLink>
       </nav>
 
       <header className="space-y-4">
@@ -55,7 +55,7 @@ export default async function UpdateDetailPage({
           <LegalStatusBadge status={item.legal_status} />
         </div>
 
-        <h1 className="text-2xl font-bold leading-relaxed text-(--color-ink)">
+        <h1 className="text-2xl leading-relaxed font-bold text-(--color-ink) sm:text-[1.6rem]">
           {item.title_ar}
         </h1>
 
@@ -80,15 +80,15 @@ export default async function UpdateDetailPage({
       </header>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-(--color-ink-muted)">الملخص</h2>
+        <h2 className="text-xs font-semibold tracking-wide text-(--color-ink-subtle)">الملخص</h2>
         <p className="text-base leading-loose text-(--color-ink)">{item.summary_ar}</p>
         <p className="text-xs text-(--color-ink-subtle)">
           ملخص آلي لأغراض الرصد. النص الرسمي في المصدر هو المرجع عند أي اختلاف.
         </p>
       </section>
 
-      <section className="space-y-3 rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-5">
-        <h2 className="text-sm font-semibold text-(--color-ink-muted)">المصدر الرسمي</h2>
+      <section className="space-y-3 rounded-(--radius-lg) border border-(--color-border) bg-(--color-surface-raised) p-5 sm:p-6">
+        <h2 className="text-xs font-semibold tracking-wide text-(--color-ink-subtle)">المصدر الرسمي</h2>
 
         <div className="space-y-1">
           <p className="text-sm font-medium text-(--color-ink)">
@@ -111,9 +111,10 @@ export default async function UpdateDetailPage({
             /* noreferrer as well as noopener: the destination has no need to
                learn that an internal legal platform links to it. */
             rel="noopener noreferrer"
-            className="inline-block rounded-md bg-(--color-brand) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--color-brand-hover)"
+            className={BUTTON.primary}
           >
-            فتح المصدر الرسمي ↗
+            فتح المصدر الرسمي
+            <ExternalLinkIcon />
           </a>
         ) : (
           /*
@@ -124,7 +125,7 @@ export default async function UpdateDetailPage({
           */
           <div
             role="alert"
-            className="space-y-2 rounded-md border border-(--color-warn) bg-(--color-warn-subtle) p-3"
+            className="space-y-2 rounded-(--radius-control) border border-(--color-warn) bg-(--color-warn-subtle) p-3"
           >
             <p className="text-sm font-medium text-(--color-warn)">
               الرابط الأصلي غير متاح
@@ -167,7 +168,7 @@ export default async function UpdateDetailPage({
           <ul className="flex flex-wrap gap-1.5">
             {item.keywords.map((k) => (
               <li key={k}>
-                <Link href={`/updates?keyword=${encodeURIComponent(k)}`}>
+                <Link href={`/updates?keyword=${encodeURIComponent(k)}`} className="transition-opacity hover:opacity-80">
                   <Badge tone="brand">{k}</Badge>
                 </Link>
               </li>
@@ -210,7 +211,7 @@ export default async function UpdateDetailPage({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2">
-      <h2 className="text-sm font-semibold text-(--color-ink-muted)">{title}</h2>
+      <h2 className="text-xs font-semibold tracking-wide text-(--color-ink-subtle)">{title}</h2>
       {children}
     </section>
   )

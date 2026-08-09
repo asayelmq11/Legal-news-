@@ -13,11 +13,11 @@ export default async function DashboardPage() {
   const [user, refreshStatus] = await Promise.all([requireActiveUser(), getRefreshStatus()])
 
   return (
-    <div className="space-y-10">
-      <header className="space-y-3">
+    <div className="space-y-8">
+      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4 border-b border-(--color-border) pb-6">
         <div>
           <h1 className="text-2xl font-bold text-(--color-ink)">لوحة المتابعة</h1>
-          <p className="text-sm text-(--color-ink-muted)">
+          <p className="mt-1 text-sm text-(--color-ink-muted)">
             أهلاً {user.full_name ?? user.email} — التحديثات القانونية الأخيرة في دول مجلس التعاون.
           </p>
         </div>
@@ -43,21 +43,24 @@ async function LegalSection() {
 
 function SectionSkeleton({ rows }: { rows: number }) {
   return (
-    <div className="space-y-4" aria-busy="true" aria-label="جارٍ التحميل">
-      <div className="grid gap-4 sm:grid-cols-3">
-        {[0, 1, 2].map((i) => (
+    <div className="space-y-10" aria-busy="true" aria-label="جارٍ التحميل">
+      <div className="h-28 animate-pulse rounded-(--radius-lg) bg-(--color-surface-sunken)" />
+      <div className="grid gap-8 lg:grid-cols-2">
+        {[0, 1].map((i) => (
           <div
             key={i}
-            className="h-24 animate-pulse rounded-(--radius-card) bg-(--color-surface-sunken)"
+            className="h-48 animate-pulse rounded-(--radius-lg) bg-(--color-surface-sunken)"
           />
         ))}
       </div>
-      {Array.from({ length: rows }, (_, i) => (
-        <div
-          key={i}
-          className="h-48 animate-pulse rounded-(--radius-card) bg-(--color-surface-sunken)"
-        />
-      ))}
+      <div className="space-y-3">
+        {Array.from({ length: rows }, (_, i) => (
+          <div
+            key={i}
+            className="h-20 animate-pulse rounded-(--radius-lg) bg-(--color-surface-sunken)"
+          />
+        ))}
+      </div>
     </div>
   )
 }

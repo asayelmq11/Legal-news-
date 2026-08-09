@@ -3,6 +3,8 @@
 import { useActionState } from 'react'
 
 import { ActionMessage, Field, inputClass, SubmitButton } from '@/components/admin/form-parts'
+import { Badge } from '@/components/badges'
+import { CONTROL_COMPACT } from '@/components/ui'
 import { IDLE } from '@/lib/actions/state'
 import { createUserProfile, setUserActive, setUserRole } from '@/lib/admin/actions'
 import type { UserRow } from '@/lib/admin/queries'
@@ -15,7 +17,7 @@ export function CreateUserForm() {
     <form action={action} className="space-y-4">
       <ActionMessage state={state} />
 
-      <p className="rounded-md bg-(--color-surface-sunken) px-3 py-2 text-xs leading-relaxed text-(--color-ink-muted)">
+      <p className="rounded-(--radius-control) bg-(--color-surface-sunken) px-3 py-2 text-xs leading-relaxed text-(--color-ink-muted)">
         أنشئ الحساب أولاً من <span className="font-medium">Supabase → Authentication → Users</span>{' '}
         ثم انسخ معرّفه هنا. لا تُنشئ المنصة حسابات المصادقة ولا تتعامل مع كلمات المرور إطلاقاً، ولا
         يوجد تسجيل ذاتي.
@@ -54,21 +56,13 @@ export function UserRow_({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
         <div>
           <p className="text-sm font-medium text-(--color-ink)">
             {user.full_name ?? user.email}
-            {isSelf ? <span className="mr-2 text-xs text-(--color-ink-subtle)">(أنت)</span> : null}
+            {isSelf ? <span className="ms-2 text-xs text-(--color-ink-subtle)">(أنت)</span> : null}
           </p>
           <p className="font-mono text-xs text-(--color-ink-subtle)" dir="ltr">
             {user.email}
           </p>
         </div>
-        <span
-          className={
-            user.active
-              ? 'rounded-full bg-(--color-ok-subtle) px-2.5 py-0.5 text-xs text-(--color-ok)'
-              : 'rounded-full bg-(--color-surface-sunken) px-2.5 py-0.5 text-xs text-(--color-ink-muted)'
-          }
-        >
-          {user.active ? 'مفعّل' : 'موقوف'}
-        </span>
+        <Badge tone={user.active ? 'ok' : 'neutral'}>{user.active ? 'مفعّل' : 'موقوف'}</Badge>
       </div>
 
       <div className="flex flex-wrap items-end gap-4">
@@ -83,7 +77,7 @@ export function UserRow_({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
               name="role"
               defaultValue={user.role}
               disabled={isSelf}
-              className="rounded-md border border-(--color-border-strong) bg-(--color-surface) px-3 py-1.5 text-sm disabled:opacity-50"
+              className={CONTROL_COMPACT}
             >
               <option value="viewer">{USER_ROLE_LABELS_AR.viewer}</option>
               <option value="admin">{USER_ROLE_LABELS_AR.admin}</option>

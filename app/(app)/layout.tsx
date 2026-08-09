@@ -20,7 +20,7 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-dvh">
-      <header className="border-b border-(--color-border) bg-(--color-surface-raised)">
+      <header className="sticky top-0 z-30 border-b border-(--color-border) bg-(--color-surface-raised)/90 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-3">
           <div className="flex items-center gap-6">
             <span className="text-sm font-bold text-(--color-ink)">منصة الرصد القانوني</span>

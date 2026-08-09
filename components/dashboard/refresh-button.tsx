@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 
+import { BUTTON } from '@/components/ui'
+import { ClockIcon, RefreshIcon } from '@/components/icons'
 import { checkRefreshStatus, triggerManualRefresh } from '@/lib/ingestion/actions'
 import type { RefreshStatus } from '@/lib/queries/ingestion'
 import { cn, formatDateTimeAr } from '@/lib/utils'
@@ -94,28 +96,25 @@ export function RefreshButton({ initialStatus }: { initialStatus: RefreshStatus 
   const busy = running || isPending
 
   return (
-    <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col items-end gap-2">
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={handleClick}
-          disabled={busy}
-          className="rounded-md bg-(--color-brand) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--color-brand-hover) disabled:opacity-60"
-        >
-          {busy ? 'جاري تحديث المستجدات...' : 'تحديث المستجدات'}
+        <button type="button" onClick={handleClick} disabled={busy} className={BUTTON.primary}>
+          <RefreshIcon className={cn('size-4', busy && 'animate-spin')} />
+          {busy ? 'جارٍ تحديث المستجدات…' : 'تحديث المستجدات'}
         </button>
-        <p className="text-xs text-(--color-ink-subtle)">
-          آخر تحديث ناجح: {lastSuccessfulRefreshAt ? formatDateTimeAr(lastSuccessfulRefreshAt) : 'لا يوجد بعد'}
-        </p>
       </div>
+      <p className="flex items-center gap-1.5 text-xs text-(--color-ink-subtle)">
+        <ClockIcon className="size-3.5" />
+        آخر تحديث ناجح: {lastSuccessfulRefreshAt ? formatDateTimeAr(lastSuccessfulRefreshAt) : 'لا يوجد بعد'}
+      </p>
       {message ? (
         <p
           role="status"
           className={cn(
-            'rounded-md px-3 py-1.5 text-sm',
-            message.tone === 'ok' && 'bg-(--color-ok-subtle) text-(--color-ok)',
-            message.tone === 'error' && 'bg-(--color-danger-subtle) text-(--color-danger)',
-            message.tone === 'info' && 'bg-(--color-surface-sunken) text-(--color-ink-muted)',
+            'text-xs font-medium',
+            message.tone === 'ok' && 'text-(--color-ok)',
+            message.tone === 'error' && 'text-(--color-danger)',
+            message.tone === 'info' && 'text-(--color-ink-muted)',
           )}
         >
           {message.text}

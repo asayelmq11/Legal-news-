@@ -1,103 +1,64 @@
-import { cn } from '@/lib/utils'
-
-export function Card({
-  title,
-  hint,
-  children,
-  className,
-}: {
-  title: string
-  hint?: string
-  children: React.ReactNode
-  className?: string
-}) {
-  return (
-    <section
-      className={cn(
-        'rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-5',
-        className,
-      )}
-    >
-      <header className="mb-4">
-        <h2 className="text-sm font-semibold text-(--color-ink)">{title}</h2>
-        {hint ? <p className="mt-0.5 text-xs text-(--color-ink-subtle)">{hint}</p> : null}
-      </header>
-      {children}
-    </section>
-  )
-}
-
-export function Stat({
-  label,
-  value,
-  hint,
-  tone = 'neutral',
-}: {
-  label: string
-  value: string | number
-  // Explicit `| undefined` because exactOptionalPropertyTypes distinguishes
-  // "absent" from "present and undefined", and callers pass a computed value.
-  hint?: string | undefined
-  tone?: 'neutral' | 'ok' | 'warn' | 'danger'
-}) {
-  const toneClass = {
-    neutral: 'text-(--color-ink)',
-    ok: 'text-(--color-ok)',
-    warn: 'text-(--color-warn)',
-    danger: 'text-(--color-danger)',
-  }[tone]
-
-  return (
-    <div className="rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) px-5 py-4">
-      <p className="text-sm text-(--color-ink-muted)">{label}</p>
-      <p className={cn('mt-1 text-2xl font-bold tabular-nums', toneClass)}>{value}</p>
-      {hint ? <p className="mt-1 text-xs text-(--color-ink-subtle)">{hint}</p> : null}
-    </div>
-  )
-}
-
 /**
- * Horizontal proportion bars.
- *
- * Deliberately CSS, not a charting library: the dashboard shows a handful of
- * category counts, and a 100 KB dependency to draw a rectangle is not a trade
- * worth making in a platform whose stated priority is maintainability. Values
- * are rendered as text alongside the bar, so the bar is decoration and the
- * number is the data.
+ * Ranked proportion list — rank, label, count, and share of the total, with a
+ * bar as a scannable secondary cue. Deliberately CSS, not a charting library:
+ * the dashboard shows a handful of counts, and a 100 KB dependency to draw a
+ * rectangle is not a trade worth making. The bar is decoration; the numbers
+ * are the data.
  */
-export function BarList({
+export function DistributionList({
   items,
+  total,
   emptyLabel = 'لا توجد بيانات بعد',
+  limit = 6,
 }: {
   items: ReadonlyArray<{ label: string; count: number }>
+  total: number
   emptyLabel?: string
+  limit?: number
 }) {
   if (items.length === 0) {
     return <p className="text-sm text-(--color-ink-subtle)">{emptyLabel}</p>
   }
 
-  const max = Math.max(...items.map((i) => i.count), 1)
+  const shown = items.slice(0, limit)
+  const max = Math.max(...shown.map((i) => i.count), 1)
+  const restCount = items.length - shown.length
 
   return (
-    <ul className="space-y-2.5">
-      {items.map((item) => (
-        <li key={item.label} className="space-y-1">
-          <div className="flex items-baseline justify-between gap-3 text-sm">
-            <span className="text-(--color-ink-muted)">{item.label}</span>
-            <span className="font-semibold tabular-nums text-(--color-ink)">{item.count}</span>
-          </div>
-          <div
-            className="h-1.5 overflow-hidden rounded-full bg-(--color-surface-sunken)"
-            role="presentation"
-          >
-            <div
-              className="h-full rounded-full bg-(--color-brand)"
-              style={{ inlineSize: `${Math.round((item.count / max) * 100)}%` }}
-            />
-          </div>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-4">
+      <ol className="space-y-3">
+        {shown.map((item, i) => {
+          const share = total > 0 ? Math.round((item.count / total) * 100) : 0
+          return (
+            <li key={item.label} className="space-y-1.5">
+              <div className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="shrink-0 text-xs font-medium tabular-nums text-(--color-ink-subtle)">
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  <span className="truncate font-medium text-(--color-ink)">{item.label}</span>
+                </span>
+                <span className="flex shrink-0 items-baseline gap-1.5 tabular-nums">
+                  <span className="font-semibold text-(--color-ink)">{item.count}</span>
+                  <span className="text-xs text-(--color-ink-subtle)">{share}٪</span>
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-(--color-surface-sunken)" role="presentation">
+                <div
+                  className="h-full rounded-full bg-(--color-brand)"
+                  style={{ inlineSize: `${Math.round((item.count / max) * 100)}%` }}
+                />
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+      {restCount > 0 ? (
+        <p className="text-xs text-(--color-ink-subtle)">
+          و{restCount} {restCount === 1 ? 'أخرى' : 'أخرى'} بعدد أقل
+        </p>
+      ) : null}
+    </div>
   )
 }
 
@@ -105,7 +66,7 @@ export function ErrorCard({ title, error }: { title: string; error: string }) {
   return (
     <div
       role="alert"
-      className="rounded-(--radius-card) border border-(--color-danger) bg-(--color-danger-subtle) p-5"
+      className="rounded-(--radius-lg) border border-(--color-danger) bg-(--color-danger-subtle) p-5"
     >
       <h2 className="text-sm font-semibold text-(--color-danger)">{title}</h2>
       <p className="mt-1 text-sm text-(--color-ink-muted)">

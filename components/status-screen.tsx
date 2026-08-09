@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+import { BUTTON } from '@/components/ui'
 import { cn } from '@/lib/utils'
 
 /**
@@ -24,7 +25,7 @@ export function StatusScreen({
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-6 py-16">
       <div
         className={cn(
-          'space-y-4 rounded-(--radius-card) border p-8',
+          'space-y-4 rounded-(--radius-lg) border p-8 shadow-(--shadow-raised)',
           tone === 'danger' && 'border-(--color-danger) bg-(--color-danger-subtle)',
           tone === 'warn' && 'border-(--color-warn) bg-(--color-warn-subtle)',
           tone === 'neutral' && 'border-(--color-border) bg-(--color-surface-raised)',
@@ -36,10 +37,7 @@ export function StatusScreen({
         {detail ? <div className="text-sm text-(--color-ink-muted)">{detail}</div> : null}
 
         {action ? (
-          <Link
-            href={action.href}
-            className="inline-block rounded-md bg-(--color-brand) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--color-brand-hover)"
-          >
+          <Link href={action.href} className={BUTTON.primary}>
             {action.label}
           </Link>
         ) : null}

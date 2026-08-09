@@ -12,8 +12,12 @@ import type { Database } from '@/types/database'
  * to the server. Bouncing it to /login would strand the fragment on a page that
  * cannot use it. The page grants nothing on its own — it can only set a
  * password for a session the browser manages to establish from that fragment.
+ *
+ * `/forgot-password` is the same idea one step earlier: whoever is there does
+ * not have a session yet either, by definition — they are asking Supabase to
+ * send the email that leads to /update-password.
  */
-const PUBLIC_PATHS = ['/login', '/auth/callback', '/update-password'] as const
+const PUBLIC_PATHS = ['/login', '/auth/callback', '/update-password', '/forgot-password'] as const
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))

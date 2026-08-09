@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 
 import { ActionMessage, SubmitButton } from '@/components/admin/form-parts'
+import { CONTROL_COMPACT } from '@/components/ui'
 import { IDLE } from '@/lib/actions/state'
 import { setSourceActive, setSourceConfigStatus } from '@/lib/admin/actions'
 import type { SourceRow } from '@/lib/admin/queries'
@@ -33,7 +34,7 @@ export function SourceControls({ source }: { source: SourceRow }) {
             id={`status-${source.id}`}
             name="config_status"
             defaultValue={source.config_status}
-            className="rounded-md border border-(--color-border-strong) bg-(--color-surface) px-3 py-1.5 text-sm"
+            className={CONTROL_COMPACT}
           >
             {STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>

@@ -5,6 +5,9 @@ export interface NavItem {
   readonly labelAr: string
   /** Roles permitted to see the link. Admin-only items are omitted for viewers. */
   readonly roles: readonly UserRole[]
+  /** Purely presentational grouping — lets the nav visually separate admin-only
+   *  links from everyday ones without touching the role guard below. */
+  readonly group: 'primary' | 'admin'
 }
 
 /**
@@ -13,11 +16,11 @@ export interface NavItem {
  * regardless. Hiding a link is a courtesy; the guard is the control.
  */
 export const NAV_ITEMS: readonly NavItem[] = [
-  { href: '/', labelAr: 'لوحة المتابعة', roles: ['admin', 'viewer'] },
-  { href: '/updates', labelAr: 'الأرشيف القانوني', roles: ['admin', 'viewer'] },
-  { href: '/sources', labelAr: 'المصادر', roles: ['admin'] },
-  { href: '/users', labelAr: 'المستخدمون', roles: ['admin'] },
-  { href: '/settings', labelAr: 'الإعدادات', roles: ['admin'] },
+  { href: '/', labelAr: 'لوحة المتابعة', roles: ['admin', 'viewer'], group: 'primary' },
+  { href: '/updates', labelAr: 'الأرشيف القانوني', roles: ['admin', 'viewer'], group: 'primary' },
+  { href: '/sources', labelAr: 'المصادر', roles: ['admin'], group: 'admin' },
+  { href: '/users', labelAr: 'المستخدمون', roles: ['admin'], group: 'admin' },
+  { href: '/settings', labelAr: 'الإعدادات', roles: ['admin'], group: 'admin' },
 ]
 
 export function navItemsFor(role: UserRole): readonly NavItem[] {

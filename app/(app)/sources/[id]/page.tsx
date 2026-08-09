@@ -1,9 +1,9 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { Badge } from '@/components/badges'
 import { SourceControls } from '@/components/admin/source-controls'
 import { SourceForm } from '@/components/admin/source-form'
+import { BackLink } from '@/components/ui'
 import { requireAdmin } from '@/lib/auth/session'
 import { getSource } from '@/lib/admin/queries'
 import { verificationBlockers } from '@/lib/admin/source-schema'
@@ -35,9 +35,7 @@ export default async function SourceDetailPage({
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <nav className="text-sm">
-        <Link href="/sources" className="text-(--color-brand) hover:underline">
-          ← المصادر
-        </Link>
+        <BackLink href="/sources">المصادر</BackLink>
       </nav>
 
       <header className="space-y-2">
@@ -50,7 +48,7 @@ export default async function SourceDetailPage({
       </header>
 
       {source.requires_authority_check ? (
-        <p className="rounded-md border border-(--color-warn) bg-(--color-warn-subtle) px-4 py-3 text-sm text-(--color-ink-muted)">
+        <p className="rounded-(--radius-control) border border-(--color-warn) bg-(--color-warn-subtle) px-4 py-3 text-sm text-(--color-ink-muted)">
           <strong className="text-(--color-warn)">يتطلب التحقق من هوية الجهة.</strong> نطاق هذا
           المصدر غير حكومي، ولا يمنح النطاق وحده أي ضمان. تأكد أنه موقع الجهة الحقيقي قبل الوثوق
           بما ينشره.
@@ -58,7 +56,7 @@ export default async function SourceDetailPage({
       ) : null}
 
       {source.config_status === 'requires_subscription' ? (
-        <p className="rounded-md border border-(--color-danger) bg-(--color-danger-subtle) px-4 py-3 text-sm text-(--color-ink-muted)">
+        <p className="rounded-(--radius-control) border border-(--color-danger) bg-(--color-danger-subtle) px-4 py-3 text-sm text-(--color-ink-muted)">
           <strong className="text-(--color-danger)">يتطلب اشتراكاً.</strong> لم يُحدَّد مسار وصول
           مشروع بعد. لا يجوز الالتفاف على الحماية أو استخدام وسائل وصول غير مصرّح بها — يبقى المصدر
           موقوفاً حتى تُقرّ الإدارة القانونية وسيلة وصول نظامية.
@@ -66,7 +64,7 @@ export default async function SourceDetailPage({
       ) : null}
 
       {source.exclusion_group ? (
-        <p className="rounded-md border border-(--color-warn) bg-(--color-warn-subtle) px-4 py-3 text-sm text-(--color-ink-muted)">
+        <p className="rounded-(--radius-control) border border-(--color-warn) bg-(--color-warn-subtle) px-4 py-3 text-sm text-(--color-ink-muted)">
           <strong className="text-(--color-warn)">مجموعة استبعاد: {source.exclusion_group}.</strong>{' '}
           قد يكون هذا المصدر نسخة مطابقة لمصدر آخر. يُسمح بتفعيل عضو واحد فقط، لأن بصمة المحتوى تشمل
           الرابط فلا تكتشف الازدواج بين نسختين.
@@ -74,7 +72,7 @@ export default async function SourceDetailPage({
       ) : null}
 
       {blockers.length > 0 ? (
-        <div className="rounded-md border border-(--color-border) bg-(--color-surface-sunken) px-4 py-3 text-sm">
+        <div className="rounded-(--radius-control) border border-(--color-border) bg-(--color-surface-sunken) px-4 py-3 text-sm">
           <p className="font-medium text-(--color-ink)">ما ينقص قبل وسمه «تم التحقق»:</p>
           <ul className="mt-1 list-inside list-disc text-(--color-ink-muted)">
             {blockers.map((b) => (

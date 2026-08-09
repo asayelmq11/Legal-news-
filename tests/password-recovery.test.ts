@@ -20,17 +20,25 @@ let behaviour = {
   user: null as { id: string } | null,
   getUserError: null as { name: string; message: string } | null,
   updateError: null as { name: string; message: string; code?: string; status?: number } | null,
+  resetError: null as { name: string; message: string; code?: string; status?: number } | null,
 }
 
 const calls = {
   updateUser: [] as { password?: string }[],
   signOut: [] as ({ scope?: string } | undefined)[],
+  resetPasswordForEmail: [] as { email: string; redirectTo?: string }[],
 }
 
 const redirects: string[] = []
 
+const requestHeaders = new Map<string, string>([
+  ['host', 'legal.internal'],
+  ['x-forwarded-proto', 'https'],
+])
+
 vi.mock('next/headers', () => ({
   cookies: async () => ({ getAll: () => [], set: () => undefined }),
+  headers: async () => ({ get: (name: string) => requestHeaders.get(name) ?? null }),
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/navigation', () => ({
@@ -56,11 +64,17 @@ vi.mock('@/lib/supabase/server', () => ({
         return { error: null }
       },
       signInWithPassword: async () => ({ error: null }),
+      resetPasswordForEmail: async (email: string, options?: { redirectTo?: string }) => {
+        calls.resetPasswordForEmail.push(
+          options?.redirectTo ? { email, redirectTo: options.redirectTo } : { email },
+        )
+        return { data: {}, error: behaviour.resetError }
+      },
     },
   }),
 }))
 
-const { updatePassword } = await import('@/lib/auth/actions')
+const { updatePassword, requestPasswordReset } = await import('@/lib/auth/actions')
 const { parseRecoveryFragment, summariseFragment, recoveryErrorMessage } = await import(
   '@/lib/auth/recovery'
 )
@@ -87,7 +101,8 @@ beforeEach(() => {
   redirects.length = 0
   calls.updateUser.length = 0
   calls.signOut.length = 0
-  behaviour = { user: { id: 'u1' }, getUserError: null, updateError: null }
+  calls.resetPasswordForEmail.length = 0
+  behaviour = { user: { id: 'u1' }, getUserError: null, updateError: null, resetError: null }
 })
 
 afterEach(() => {
@@ -313,5 +328,78 @@ describe('SECURITY: nothing sensitive is ever written to a log', () => {
     await updatePassword({ status: 'idle' }, form({ password: 'weak', confirm: 'weak' }))
 
     expect(logged.join('\n')).not.toContain('weak')
+  })
+})
+
+describe('requestPasswordReset — the login-side entry step', () => {
+  it('asks Supabase for the recovery email with redirectTo pointing at /update-password', async () => {
+    const state = await requestPasswordReset({ status: 'idle' }, form({ email: 'admin@legal.internal' }))
+
+    expect(state).toEqual({ status: 'sent' })
+    expect(calls.resetPasswordForEmail).toEqual([
+      { email: 'admin@legal.internal', redirectTo: 'https://legal.internal/update-password' },
+    ])
+  })
+
+  it('lowercases the address before sending it to Supabase', async () => {
+    await requestPasswordReset({ status: 'idle' }, form({ email: 'Admin@Legal.Internal' }))
+
+    expect(calls.resetPasswordForEmail).toEqual([
+      { email: 'admin@legal.internal', redirectTo: 'https://legal.internal/update-password' },
+    ])
+  })
+
+  it('rejects a malformed email before ever calling Supabase', async () => {
+    const state = await requestPasswordReset({ status: 'idle' }, form({ email: 'not-an-email' }))
+
+    expect(state.status).toBe('failed')
+    expect(calls.resetPasswordForEmail).toEqual([])
+  })
+
+  it('SECURITY: answers the same way whether or not the address has an account', async () => {
+    // Supabase itself returns no error either way; this pins that this action
+    // does not add a distinction of its own on top.
+    const known = await requestPasswordReset({ status: 'idle' }, form({ email: 'known@legal.internal' }))
+    const unknown = await requestPasswordReset(
+      { status: 'idle' },
+      form({ email: 'unknown@legal.internal' }),
+    )
+
+    expect(known).toEqual({ status: 'sent' })
+    expect(unknown).toEqual({ status: 'sent' })
+  })
+
+  it('SECURITY: still answers "sent" even when Supabase rejects the request, and logs the reason instead', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    behaviour.resetError = {
+      name: 'AuthApiError',
+      code: 'over_email_send_rate_limit',
+      status: 429,
+      message: 'Email rate limit exceeded',
+    }
+
+    const state = await requestPasswordReset({ status: 'idle' }, form({ email: 'admin@legal.internal' }))
+
+    expect(state).toEqual({ status: 'sent' })
+  })
+
+  it('logs an operator-facing reason when Supabase rejects the request, without the email', async () => {
+    const logged: string[] = []
+    vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
+      logged.push(String(line))
+    })
+    behaviour.resetError = {
+      name: 'AuthApiError',
+      code: 'over_email_send_rate_limit',
+      status: 429,
+      message: 'Email rate limit exceeded',
+    }
+
+    await requestPasswordReset({ status: 'idle' }, form({ email: 'admin@legal.internal' }))
+
+    const output = logged.join('\n')
+    expect(output).toContain('name=AuthApiError')
+    expect(output).toContain('code=over_email_send_rate_limit')
+    expect(output).not.toContain('admin@legal.internal')
   })
 })

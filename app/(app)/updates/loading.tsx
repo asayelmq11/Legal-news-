@@ -5,15 +5,15 @@
  */
 export default function Loading() {
   return (
-    <div className="space-y-6" aria-busy="true" aria-label="جارٍ تحميل الأرشيف">
-      <div className="h-16 animate-pulse rounded-(--radius-card) bg-(--color-surface-sunken)" />
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-        <div className="h-[32rem] animate-pulse rounded-(--radius-card) bg-(--color-surface-sunken)" />
-        <div className="space-y-3">
+    <div className="space-y-8" aria-busy="true" aria-label="جارٍ تحميل الأرشيف">
+      <div className="h-14 animate-pulse rounded-(--radius-lg) bg-(--color-surface-sunken)" />
+      <div className="grid gap-6 lg:grid-cols-[300px_1fr] xl:grid-cols-[340px_1fr]">
+        <div className="h-[36rem] animate-pulse rounded-(--radius-lg) bg-(--color-surface-sunken)" />
+        <div className="space-y-5">
           {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-36 animate-pulse rounded-(--radius-card) bg-(--color-surface-sunken)"
+              className="h-24 animate-pulse rounded-(--radius-control) bg-(--color-surface-sunken)"
             />
           ))}
         </div>

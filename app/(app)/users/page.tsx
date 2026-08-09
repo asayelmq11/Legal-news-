@@ -20,19 +20,19 @@ export default async function UsersPage() {
       </header>
 
       {error ? (
-        <p role="alert" className="rounded-md bg-(--color-danger-subtle) px-3 py-2 text-sm text-(--color-danger)">
+        <p role="alert" className="rounded-(--radius-control) bg-(--color-danger-subtle) px-3 py-2 text-sm text-(--color-danger)">
           تعذّر تحميل المستخدمين: {error}
         </p>
       ) : null}
 
       {activeAdmins <= 1 ? (
-        <p className="rounded-md border border-(--color-warn) bg-(--color-warn-subtle) px-4 py-3 text-sm text-(--color-ink-muted)">
+        <p className="rounded-(--radius-control) border border-(--color-warn) bg-(--color-warn-subtle) px-4 py-3 text-sm text-(--color-ink-muted)">
           <strong className="text-(--color-warn)">يوجد مسؤول فعّال واحد فقط.</strong> لا يمكن إيقافه
           أو خفض صلاحيته حتى يُعيَّن مسؤول آخر، وإلا تعذّرت إدارة المنصة نهائياً.
         </p>
       ) : null}
 
-      <section className="rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-5">
+      <section className="rounded-(--radius-lg) border border-(--color-border) bg-(--color-surface-raised) p-5 sm:p-6">
         <h2 className="mb-4 text-sm font-semibold text-(--color-ink)">إضافة ملف مستخدم</h2>
         <CreateUserForm />
       </section>

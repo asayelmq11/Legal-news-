@@ -21,7 +21,7 @@ export default async function SettingsPage() {
         </p>
       </header>
 
-      <p className="rounded-md border border-(--color-border) bg-(--color-surface-sunken) px-4 py-3 text-xs leading-relaxed text-(--color-ink-muted)">
+      <p className="rounded-(--radius-control) border border-(--color-border) bg-(--color-surface-sunken) px-4 py-3 text-xs leading-relaxed text-(--color-ink-muted)">
         <strong className="text-(--color-ink)">لا تُخزَّن هنا أي بيانات اعتماد.</strong> مفاتيح الـ
         API وكلمات المرور وأسرار الويب‑هوك مكانها بيانات اعتماد n8n أو مدير الأسرار في بيئة النشر.
         ترفض قاعدة البيانات أي مفتاح يحمل صيغة بيانات اعتماد، ولا يمكن إضافة مفاتيح جديدة من هذه
@@ -29,7 +29,7 @@ export default async function SettingsPage() {
       </p>
 
       {error ? (
-        <p role="alert" className="rounded-md bg-(--color-danger-subtle) px-3 py-2 text-sm text-(--color-danger)">
+        <p role="alert" className="rounded-(--radius-control) bg-(--color-danger-subtle) px-3 py-2 text-sm text-(--color-danger)">
           تعذّر تحميل الإعدادات: {error}
         </p>
       ) : null}

@@ -1,14 +1,18 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
+import { AuthShell } from '@/components/ui'
 import { LoginForm } from './login-form'
 
 export const metadata: Metadata = { title: 'تسجيل الدخول' }
 
 /**
- * There is no sign-up link and no self-service "forgot password", by design:
- * accounts are created by an administrator, and a recovery email is sent by an
- * administrator. A person who cannot sign in needs an administrator, not a
- * form. The link in that email lands on /update-password.
+ * There is no sign-up link, by design: accounts are created by an
+ * administrator. Password recovery, however, is self-service — the "نسيت كلمة
+ * المرور؟" link below leads to /forgot-password, which asks Supabase to send
+ * the existing recovery email. That email's link still lands on
+ * /update-password and is handled entirely by RecoveryForm/updatePassword;
+ * nothing about that path changes here.
  */
 export default async function LoginPage({
   searchParams,
@@ -18,30 +22,28 @@ export default async function LoginPage({
   const { next, reset } = await searchParams
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-16">
-      <div className="space-y-6 rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-8">
-        <header className="space-y-2 text-center">
-          <h1 className="text-xl font-bold text-(--color-ink)">منصة الرصد القانوني</h1>
-          <p className="text-sm text-(--color-ink-muted)">
-            نظام داخلي للإدارة القانونية — الدخول للموظفين المصرّح لهم فقط
-          </p>
-        </header>
+    <AuthShell
+      title="منصة الرصد القانوني"
+      subtitle="نظام داخلي للإدارة القانونية — الدخول للموظفين المصرّح لهم فقط"
+      footer="لا يوجد تسجيل ذاتي. تُنشأ الحسابات عن طريق مسؤول النظام."
+    >
+      {reset ? (
+        <p
+          role="status"
+          className="rounded-(--radius-control) border border-(--color-ok) bg-(--color-ok-subtle) px-3 py-2 text-sm leading-relaxed text-(--color-ok)"
+        >
+          تم تحديث كلمة المرور وإنهاء جميع الجلسات السابقة. سجّل الدخول بكلمة المرور الجديدة.
+        </p>
+      ) : null}
 
-        {reset ? (
-          <p
-            role="status"
-            className="rounded-md border border-(--color-ok) bg-(--color-ok-subtle) px-3 py-2 text-sm leading-relaxed text-(--color-ok)"
-          >
-            تم تحديث كلمة المرور وإنهاء جميع الجلسات السابقة. سجّل الدخول بكلمة المرور الجديدة.
-          </p>
-        ) : null}
+      <LoginForm next={next} />
 
-        <LoginForm next={next} />
-      </div>
-
-      <p className="mt-6 text-center text-xs text-(--color-ink-subtle)">
-        لا يوجد تسجيل ذاتي. تُنشأ الحسابات عن طريق مسؤول النظام.
-      </p>
-    </main>
+      <Link
+        href="/forgot-password"
+        className="block rounded-(--radius-control) border border-(--color-border) px-3 py-2.5 text-center text-sm font-medium text-(--color-ink-muted) transition-colors hover:bg-(--color-surface-sunken) hover:text-(--color-ink)"
+      >
+        هل نسيت كلمة المرور؟
+      </Link>
+    </AuthShell>
   )
 }

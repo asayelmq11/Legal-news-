@@ -1,5 +1,8 @@
 'use client'
 
+import { BUTTON } from '@/components/ui'
+import { cn } from '@/lib/utils'
+
 /**
  * Route error boundary. Catches anything the query layer's Result type does not
  * already handle — a render fault, an auth failure mid-stream.
@@ -19,7 +22,7 @@ export default function ArchiveError({
   return (
     <div
       role="alert"
-      className="rounded-(--radius-card) border border-(--color-danger) bg-(--color-danger-subtle) p-6"
+      className="rounded-(--radius-lg) border border-(--color-danger) bg-(--color-danger-subtle) p-6"
     >
       <h2 className="text-sm font-semibold text-(--color-danger)">تعذّر عرض الأرشيف</h2>
       <p className="mt-1 text-sm text-(--color-ink-muted)">
@@ -30,11 +33,7 @@ export default function ArchiveError({
           {error.digest}
         </p>
       ) : null}
-      <button
-        type="button"
-        onClick={reset}
-        className="mt-4 rounded-md bg-(--color-brand) px-4 py-2 text-sm font-semibold text-white hover:bg-(--color-brand-hover)"
-      >
+      <button type="button" onClick={reset} className={cn(BUTTON.primary, 'mt-4')}>
         إعادة المحاولة
       </button>
     </div>

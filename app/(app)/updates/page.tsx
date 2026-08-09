@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 
+import { ActiveFilterChips } from '@/components/updates/active-filter-chips'
 import { ArchiveFilterPanel } from '@/components/updates/archive-filters'
 import { ArchivePagination } from '@/components/updates/pagination'
 import { UpdateCard } from '@/components/updates/update-card'
@@ -29,22 +30,25 @@ export default async function UpdatesPage({
   const filters = parseArchiveFilters(raw)
 
   return (
-    <div className="space-y-6">
-      <header className="space-y-1">
+    <div className="space-y-8">
+      <header className="space-y-1.5">
         <h1 className="text-2xl font-bold text-(--color-ink)">الأرشيف القانوني</h1>
-        <p className="text-sm text-(--color-ink-muted)">
+        <p className="text-sm leading-relaxed text-(--color-ink-muted)">
           التحديثات القانونية والتنظيمية الصادرة عن الجهات الرسمية المعتمدة في دول مجلس التعاون.
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-        <aside>
+      <div className="grid gap-6 lg:grid-cols-[300px_1fr] xl:grid-cols-[340px_1fr]">
+        <aside className="lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100dvh-5.5rem)] lg:self-start lg:overflow-y-auto">
           <Suspense fallback={<FilterSkeleton />}>
             <FilterPanel />
           </Suspense>
         </aside>
 
-        <section>
+        <section className="space-y-4">
+          <Suspense fallback={null}>
+            <ActiveFilterChips filters={filters} />
+          </Suspense>
           {/*
             Keyed on the serialised filters so changing any of them remounts the
             boundary and the skeleton is shown again, rather than the previous
@@ -77,7 +81,7 @@ async function Results({
     return (
       <div
         role="alert"
-        className="rounded-(--radius-card) border border-(--color-danger) bg-(--color-danger-subtle) p-6"
+        className="rounded-(--radius-lg) border border-(--color-danger) bg-(--color-danger-subtle) p-6"
       >
         <h2 className="text-sm font-semibold text-(--color-danger)">تعذّر تحميل الأرشيف</h2>
         <p className="mt-1 text-sm text-(--color-ink-muted)">
@@ -101,12 +105,13 @@ async function Results({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-(--color-border) pb-4">
         <p className="text-sm text-(--color-ink-muted)">
-          {total} نتيجة{filtered ? ' مطابقة للتصفية' : ''}
+          <span className="font-semibold text-(--color-ink)">{total}</span> نتيجة
+          {filtered ? ' مطابقة للتصفية' : ''}
         </p>
         {usedFuzzyFallback ? (
-          <p className="rounded-md bg-(--color-warn-subtle) px-3 py-1 text-xs text-(--color-warn)">
+          <p className="rounded-(--radius-control) bg-(--color-warn-subtle) px-3 py-1 text-xs text-(--color-warn)">
             لا توجد مطابقات تامة — عُرضت نتائج تقريبية.
           </p>
         ) : null}
@@ -117,10 +122,10 @@ async function Results({
       <ol className="space-y-8">
         {groups.map((group) => (
           <li key={group.date} className="space-y-3">
-            <h2 className="sticky top-0 z-10 -mx-1 bg-(--color-surface)/95 px-1 py-1 text-sm font-semibold text-(--color-ink-muted) backdrop-blur">
+            <h2 className="sticky top-14 z-10 -mx-1 bg-(--color-surface)/95 px-1 py-1 text-sm font-semibold text-(--color-ink-muted) backdrop-blur">
               <time dateTime={group.date}>{formatDateAr(group.date)}</time>
             </h2>
-            <ul className="space-y-3">
+            <ul className="divide-y divide-(--color-border)">
               {group.items.map((item) => (
                 <li key={item.id}>
                   <UpdateCard item={item} />
@@ -143,7 +148,7 @@ async function Results({
 
 function EmptyState({ filtered, query }: { filtered: boolean; query: string }) {
   return (
-    <div className="rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-8 text-center">
+    <div className="rounded-(--radius-lg) border border-(--color-border) bg-(--color-surface-raised) p-10 text-center">
       <h2 className="text-sm font-semibold text-(--color-ink)">
         {filtered ? 'لا توجد نتائج مطابقة' : 'الأرشيف فارغ حتى الآن'}
       </h2>
@@ -171,19 +176,18 @@ function FilterSkeleton() {
   return (
     <div
       aria-hidden
-      className="h-[32rem] animate-pulse rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-sunken)"
+      className="h-[36rem] animate-pulse rounded-(--radius-lg) border border-(--color-border) bg-(--color-surface-sunken)"
     />
   )
 }
 
 function ResultsSkeleton() {
   return (
-    <div className="space-y-3" aria-busy="true" aria-label="جارٍ التحميل">
+    <div className="divide-y divide-(--color-border)" aria-busy="true" aria-label="جارٍ التحميل">
       {[0, 1, 2, 3].map((i) => (
-        <div
-          key={i}
-          className="h-36 animate-pulse rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-sunken)"
-        />
+        <div key={i} className="py-5">
+          <div className="h-24 animate-pulse rounded-(--radius-control) bg-(--color-surface-sunken)" />
+        </div>
       ))}
     </div>
   )
