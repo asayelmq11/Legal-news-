@@ -267,6 +267,22 @@ describe('n8n workflow exports', () => {
     expect(raw).toContain('domain_mismatch')
   })
 
+  it('the normaliser applies the catch-up window when the dispatcher set one, and is a no-op otherwise', () => {
+    // Workflow 04's manual catch-up refresh is the only caller that ever sets
+    // window_from on the trigger payload — this must not affect any other
+    // caller (it never fires today, since 01/05 no longer run on a
+    // schedule, but the guard is what makes this node safe to reuse if a
+    // scheduled-style caller ever returns).
+    const wf = loadFull('02-source-ingestion.json')
+    const n = wf.nodes.find((x) => x.name === 'Normalise RawItem')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain("$('Called by scheduler').first().json.window_from")
+    expect(code).toContain('out_of_window')
+    // Only rejects a KNOWN older date — an item with no publication_date at
+    // all is left for the Publishing Gate's own no_publication_date rule.
+    expect(code).toContain('r.publication_date && r.publication_date < windowFromDate')
+  })
+
   /* ---------------------------------------------------------------------- */
   /* Publishing Gate — no confidence threshold                              */
   /* ---------------------------------------------------------------------- */
@@ -403,43 +419,130 @@ describe('n8n workflow exports', () => {
     }
   })
 
-  it('the manual-run dispatch is fired without waiting for Workflow 02', () => {
+  it('the client is answered before the background dispatch runs, not after', () => {
+    // The webhook must not hold the connection open for the whole crawl. The
+    // architecture that guarantees this changed with the catch-up refresh:
+    // instead of never waiting on Workflow 02 (the old approach), "Insert
+    // running run" fans out to "Respond: accepted" AND the dispatch chain in
+    // PARALLEL — the response is reachable without passing through either
+    // dispatch node, so it cannot be delayed by them.
     const wf = loadFull('04-manual-run.json')
-    const dispatch = wf.nodes.find((n) => n.name === 'Manual ingestion')
-    expect(dispatch, 'Manual ingestion node not found').toBeDefined()
-    expect(dispatch?.type).toBe('n8n-nodes-base.executeWorkflow')
-    const options = (dispatch?.parameters.options ?? {}) as { waitForSubWorkflow?: boolean }
-    expect(options.waitForSubWorkflow, 'the webhook must not block on Workflow 02 finishing').toBe(false)
+    const insert = wf.connections['Insert running run']?.main[0] ?? []
+    const targets = insert.map((c) => c.node)
+    expect(targets).toContain('Respond: accepted')
+    expect(targets).toContain('Prepare official dispatch')
+    expect(targets).toContain('Prepare discovery dispatch')
+
+    // Confirm there is no path FROM the dispatch nodes back INTO the respond
+    // node — i.e. the response really is on a separate branch, not staged
+    // behind the crawl.
+    const names = new Set(wf.nodes.map((n) => n.name))
+    expect(names.has('Manual ingestion'), 'the old single fire-and-forget dispatch node is gone').toBe(false)
   })
 
-  it('a malformed manual-run request is validated before any source is touched', () => {
+  it('the two dispatch calls wait for their sub-workflow, now that responding no longer depends on them', () => {
+    // Unlike the old architecture, these two now set waitForSubWorkflow:true
+    // — safe only because "Respond: accepted" already fired on the parallel
+    // branch above. Waiting is what lets Finalize run count real
+    // items_published and know when to write the completed/failed state.
     const wf = loadFull('04-manual-run.json')
-    const names = wf.nodes.map((n) => n.name)
-    expect(names).toContain('Validate request')
-    expect(names).toContain('Request valid?')
-    const raw = readFileSync(new URL('04-manual-run.json', DIR), 'utf8')
-    for (const reason of ['invalid_scope', 'missing_source_id', 'missing_country', 'missing_url']) {
-      expect(raw, `request validation must cover ${reason}`).toContain(reason)
+    for (const name of ['Dispatch official ingestion', 'Dispatch discovery catch-up']) {
+      const n = wf.nodes.find((x) => x.name === name)
+      expect(n, `${name} not found`).toBeDefined()
+      expect(n?.type).toBe('n8n-nodes-base.executeWorkflow')
+      const options = (n?.parameters.options ?? {}) as { waitForSubWorkflow?: boolean }
+      expect(options.waitForSubWorkflow, `${name} must wait for its sub-workflow`).toBe(true)
     }
-    // 'replay'/'drain' scopes only made sense with a dead-letter queue
-    expect(raw).not.toContain('missing_dead_letter_id')
   })
 
-  it('the manual-run resolver no longer checks a source lock', () => {
-    // sources.lock_expires_at was dropped with the rest of the ops columns —
-    // a manual run either finds runnable sources or it does not.
+  it('the manual run has no scope to validate — it always covers every eligible source', () => {
+    // The old source/country/url scopes were dead code: nothing in this app
+    // ever called the webhook with them. The catch-up refresh has exactly
+    // one behaviour, so there is nothing left to validate before dispatch.
+    const wf = loadFull('04-manual-run.json')
+    const names = new Set(wf.nodes.map((n) => n.name))
+    for (const gone of ['Validate request', 'Request valid?', 'Resolve manual run', 'Runnable?']) {
+      expect(names.has(gone), `04 should no longer contain "${gone}"`).toBe(false)
+    }
+    const raw = readFileSync(new URL('04-manual-run.json', DIR), 'utf8')
+    for (const gone of ['invalid_scope', 'missing_source_id', 'missing_country', 'missing_url', 'missing_dead_letter_id']) {
+      expect(raw).not.toContain(gone)
+    }
+  })
+
+  it('the manual-run resolver no longer checks a per-source lock column', () => {
+    // sources.lock_expires_at was dropped with the rest of the ops columns.
+    // Duplicate-run prevention now lives in ingestion_runs (migration 0024)
+    // instead — a database-level single-flight lock, not a per-source one.
     const wf = loadFull('04-manual-run.json')
     const raw = JSON.stringify(wf)
     expect(raw).not.toContain('lock_expires_at')
-    expect(raw).not.toContain('already_running')
   })
 
-  it('dispatch failures are folded into the response, not lost', () => {
+  it('a concurrent request is answered "already_running", never dispatched twice', () => {
     const wf = loadFull('04-manual-run.json')
-    const build = wf.nodes.find((n) => n.name === 'Build manual run response')
-    const code = String(build?.parameters.jsCode ?? '')
-    expect(code).toContain('dispatch_failed')
+    const names = wf.nodes.map((n) => n.name)
+    expect(names).toContain('Get running run')
+    expect(names).toContain('Already running?')
+    expect(names).toContain('Handle insert race or failure')
+    const raw = JSON.stringify(wf)
+    // Two layers: a pre-check read of ingestion_runs, AND a race guard on the
+    // insert itself (ingestion_runs_one_active, migration 0024's partial
+    // unique index) for the two-requests-at-once case the pre-check alone
+    // cannot catch.
+    expect(raw).toContain('already_running')
+    expect(raw).toContain('ingestion_runs_one_active')
+  })
+
+  it('the catch-up window comes from the last SUCCEEDED run, with a bounded fallback', () => {
+    const wf = loadFull('04-manual-run.json')
+    const n = wf.nodes.find((x) => x.name === 'Compute window & guard')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain("r.status === 'succeeded'")
+    expect(code).toContain('OVERLAP_HOURS')
+    expect(code).toContain('INITIAL_LOOKBACK_HOURS')
+    // No unlimited historical backfill when there has never been a successful run.
+    expect(code).not.toMatch(/INITIAL_LOOKBACK_HOURS\s*=\s*Infinity/)
+  })
+
+  it('a failed run does not advance the checkpoint', () => {
+    // Compute window & guard only ever reads status = 'succeeded' rows when
+    // picking window_from — a 'failed' or still-'running' row is invisible
+    // to that query, so a half-finished refresh cannot shrink the next
+    // run's coverage.
+    const wf = loadFull('04-manual-run.json')
+    const finalize = wf.nodes.find((x) => x.name === 'Finalize run')
+    const code = String(finalize?.parameters.jsCode ?? '')
+    expect(code).toContain("status: totalFailure ? 'failed' : 'succeeded'")
+  })
+
+  it('the catch-up refresh dispatches BOTH official sources and discovery, not just one', () => {
+    const wf = loadFull('04-manual-run.json')
+    const dispatchTo02 = wf.nodes.find((n) => n.name === 'Dispatch official ingestion')
+    const dispatchTo05 = wf.nodes.find((n) => n.name === 'Dispatch discovery catch-up')
+    expect(dispatchTo02, 'no dispatch into Workflow 02 (official sources)').toBeDefined()
+    expect(dispatchTo05, 'no dispatch into Workflow 05 (discovery)').toBeDefined()
+    const wfId02 = (dispatchTo02?.parameters.workflowId as { value?: string } | undefined)?.value
+    const wfId05 = (dispatchTo05?.parameters.workflowId as { value?: string } | undefined)?.value
+    expect(wfId02).toBe('FHt8uKbBcixIWbWO')
+    expect(wfId05).toBe('vCGP6RoEAhiG9LS5')
+  })
+
+  it('official-source eligibility excludes discovery-mode sources — Workflow 05 owns those', () => {
+    const wf = loadFull('04-manual-run.json')
+    const n = wf.nodes.find((x) => x.name === 'Prepare official dispatch')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain("s.active && s.config_status === 'verified'")
+    expect(code).toContain("s.ingestion_mode !== 'discovery'")
+  })
+
+  it('a per-source dispatch failure does not fail the whole run, only a total wipeout does', () => {
+    const wf = loadFull('04-manual-run.json')
+    const n = wf.nodes.find((x) => x.name === 'Finalize run')
+    const code = String(n?.parameters.jsCode ?? '')
     expect(code).toContain('e.error')
+    expect(code).toContain('items_published')
+    expect(code).toContain('dispatchFailures === items.length')
   })
 
   /* ---------------------------------------------------------------------- */
@@ -477,6 +580,25 @@ describe('n8n workflow exports', () => {
     const wf = loadFull('05-discovery-ingestion.json')
     const fetch = wf.nodes.find((n) => n.name === 'Fetch discovery feed')
     expect(fetch?.onError).toBe('continueRegularOutput')
+  })
+
+  it('Workflow 05 no longer runs on its own schedule — it is callable-only, triggered by Workflow 04', () => {
+    const wf = loadFull('05-discovery-ingestion.json')
+    const names = wf.nodes.map((n) => n.name)
+    expect(names).not.toContain('Every 2 hours')
+    expect(wf.nodes.some((n) => n.type === 'n8n-nodes-base.scheduleTrigger')).toBe(false)
+    const trigger = wf.nodes.find((n) => n.type === 'n8n-nodes-base.executeWorkflowTrigger')
+    expect(trigger, 'Workflow 05 must expose an Execute Workflow Trigger to be callable').toBeDefined()
+    expect(trigger?.name).toBe('Called for catch-up')
+  })
+
+  it('Workflow 05 forwards the catch-up window onto every group it dispatches', () => {
+    const wf = loadFull('05-discovery-ingestion.json')
+    const n = wf.nodes.find((x) => x.name === 'Resolve and group items')
+    const code = String(n?.parameters.jsCode ?? '')
+    expect(code).toContain("$('Called for catch-up').first().json")
+    expect(code).toContain('window_from: trigger.window_from')
+    expect(code).toContain('window_to: trigger.window_to')
   })
 
   it('discovery candidates are resolved against a real official-source registry, never invented', () => {

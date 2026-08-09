@@ -300,5 +300,52 @@ declare cfg text[]; begin
   raise notice 'PASS — current_user_role() has a pinned search_path';
 end $$;
 
+\echo '── R16. ingestion_runs: any signed-in user reads, only service_role writes ──'
+do $$
+declare n int; run_id uuid; begin
+  set local role service_role;
+  insert into public.ingestion_runs (status, window_from, window_to, completed_at, items_inserted)
+  values ('succeeded', now() - interval '1 day', now(), now(), 3)
+  returning id into run_id;
+  reset role;
+
+  set local role authenticated;
+  set local request.jwt.claim.sub = 'bbbbbbbb-0000-0000-0000-000000000002';
+  select count(*) into n from public.ingestion_runs where id = run_id;
+  reset role;
+  if n <> 1 then raise exception 'viewer could not read ingestion_runs'; end if;
+  raise notice 'PASS — viewer reads ingestion_runs';
+
+  set local role authenticated;
+  set local request.jwt.claim.sub = 'bbbbbbbb-0000-0000-0000-000000000002';
+  begin
+    insert into public.ingestion_runs (status, window_from, window_to)
+    values ('running', now(), now());
+    reset role;
+    raise exception 'viewer inserted an ingestion_runs row';
+  exception when insufficient_privilege then
+    reset role;
+    raise notice 'PASS — viewer cannot write ingestion_runs';
+  end;
+end $$;
+
+\echo '── R17. ingestion_runs: only one running row may exist at a time ───────'
+do $$
+begin
+  set local role service_role;
+  insert into public.ingestion_runs (status, window_from, window_to)
+  values ('running', now(), now());
+
+  begin
+    insert into public.ingestion_runs (status, window_from, window_to)
+    values ('running', now(), now());
+    reset role;
+    raise exception 'a second concurrent running row was accepted';
+  exception when unique_violation then
+    reset role;
+    raise notice 'PASS — the partial unique index rejects a second running row';
+  end;
+end $$;
+
 \echo ''
 \echo '════════ ALL RLS CHECKS PASSED ════════'

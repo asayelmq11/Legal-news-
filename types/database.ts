@@ -20,6 +20,53 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      ingestion_runs: {
+        Row: {
+          id: string
+          status: string
+          window_from: string
+          window_to: string
+          started_at: string
+          completed_at: string | null
+          items_inserted: number | null
+          error_message: string | null
+          requested_by: string | null
+          correlation_id: string | null
+        }
+        Insert: {
+          id?: string
+          status?: string
+          window_from: string
+          window_to: string
+          started_at?: string
+          completed_at?: string | null
+          items_inserted?: number | null
+          error_message?: string | null
+          requested_by?: string | null
+          correlation_id?: string | null
+        }
+        Update: {
+          id?: string
+          status?: string
+          window_from?: string
+          window_to?: string
+          started_at?: string
+          completed_at?: string | null
+          items_inserted?: number | null
+          error_message?: string | null
+          requested_by?: string | null
+          correlation_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'ingestion_runs_requested_by_fkey'
+            columns: ['requested_by']
+            isOneToOne: false
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       app_settings: {
         Row: {
           key: string

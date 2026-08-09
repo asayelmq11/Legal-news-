@@ -1,25 +1,16 @@
 {
-  "updatedAt": "2026-08-04T13:34:54.106Z",
+  "updatedAt": "2026-08-09T11:31:08.797Z",
   "createdAt": "2026-08-03T11:23:07.947Z",
   "id": "vCGP6RoEAhiG9LS5",
   "name": "05 — Discovery Ingestion",
   "description": null,
   "nodes": [
     {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "hours",
-              "hoursInterval": 2
-            }
-          ]
-        }
-      },
+      "parameters": {},
       "id": "3cfe7178-7109-4311-a266-c2b1fd3fc9bc",
-      "name": "Every 2 hours",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
+      "name": "Called for catch-up",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
       "position": [
         -1136,
         400
@@ -145,7 +136,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ── OFFICIAL SOURCE RESOLUTION + GROUPING ───────────────────────────────────\n// Mirrors lib/discovery/discovery.ts (resolveDiscoveredItem), the tested\n// specification. Every candidate is deduplicated within this run, resolved\n// to an official source when the evidence is strong enough, and grouped by\n// its final target source so each group becomes ONE dispatch into Workflow\n// 02 — identical to how the scheduler dispatches one execution per source.\n//\n// Nothing here decides what gets PUBLISHED. Every group still goes through\n// Normalise RawItem, AI classification and the Publishing Gate exactly like\n// an official crawl. This only decides where an item's evidence trail points.\n//\n// \"Get official sources\" has no OTHER downstream connection, and n8n's\n// execution planner can skip a node that only some other node's expression\n// references via $('...') rather than a real graph edge (see\n// docs/n8n-fixes-2026-08-02.md, incident #5, for the identical failure mode\n// hit and fixed once already in this project). The fix here is the same:\n// \"Merge for resolution\" gives it a REAL edge into this node, and the two\n// input streams are told apart by shape — official source rows have\n// allowed_domains; parsed candidates have a title and a discoverySource —\n// exactly how \"Merge state\" in Workflows 01/04 already separates settings\n// rows from source rows.\nconst all = $input.all().map((i) => i.json);\n// Same in-memory filter as \"Filter discovery sources\" — only a source the\n// database itself would let the scheduler crawl may receive a resolved item.\n// Matching a candidate to a pending/blocked/unverified source would only be\n// caught later at the Publishing Gate (rule 1 re-reads it anyway), but\n// there is no reason to credit an item to a source that cannot publish it.\nconst officialSources = all.filter(\n  (r) => Array.isArray(r.allowed_domains) && r.ingestion_mode !== 'discovery' && r.active === true && r.config_status === 'verified',\n);\nconst parsedCandidates = all.filter((r) => typeof r.title === 'string' && r.discoverySource);\n\nfunction hostnameOf(url) {\n  const m = String(url || '').match(/^https?:\\/\\/([^/:?#]+)/i);\n  return m ? m[1].toLowerCase() : null;\n}\n\nfunction matchOfficialDomain(hostname) {\n  if (!hostname) return null;\n  const hit = officialSources.find((s) => (s.allowed_domains || []).some((d) => String(d).toLowerCase() === hostname));\n  return hit ? { sourceId: hit.id, method: 'domain_match', confidence: 100 } : null;\n}\n\nfunction matchAuthorityMention(title) {\n  const text = String(title || '').trim();\n  if (!text) return null;\n  let best = null;\n  for (const s of officialSources) {\n    for (const name of [s.authority_ar, s.authority_en]) {\n      const candidate = String(name || '').trim();\n      if (candidate.length < 4 || !text.includes(candidate)) continue;\n      const confidence = Math.min(95, 40 + candidate.length);\n      if (!best || confidence > best.confidence) {\n        best = { sourceId: s.id, method: 'authority_name_match', confidence, matchedName: candidate };\n      }\n    }\n  }\n  return best;\n}\n\nconst seenTitles = new Set();\nconst groups = {};\n\nfor (const c of parsedCandidates) {\n  const normTitle = c.title.replace(/\\s+/g, ' ').trim().toLowerCase();\n  if (!normTitle || seenTitles.has(normTitle)) continue;\n  seenTitles.add(normTitle);\n\n  const domainHit = matchOfficialDomain(hostnameOf(c.sourceUrl));\n  let resolved;\n  if (domainHit) {\n    resolved = { originType: 'official', sourceId: domainHit.sourceId, canonicalUrl: c.sourceUrl, verificationMethod: 'domain_match' };\n  } else {\n    const nameHit = matchAuthorityMention(c.title);\n    if (nameHit && nameHit.confidence >= 60) {\n      resolved = { originType: 'official', sourceId: nameHit.sourceId, canonicalUrl: null, verificationMethod: 'authority_name_match' };\n    } else {\n      resolved = { originType: 'discovery', sourceId: c.discoverySource.id, canonicalUrl: null, verificationMethod: null };\n    }\n  }\n\n  let publicationDate = null;\n  if (c.pubDate) {\n    const d = new Date(c.pubDate);\n    if (!Number.isNaN(d.getTime())) publicationDate = d.toISOString().slice(0, 10);\n  }\n\n  const groupSource = resolved.originType === 'official'\n    ? officialSources.find((s) => s.id === resolved.sourceId)\n    : c.discoverySource;\n  if (!groupSource) continue;\n\n  if (!groups[resolved.sourceId]) groups[resolved.sourceId] = { source: groupSource, items: [] };\n  groups[resolved.sourceId].items.push({\n    source_url: resolved.canonicalUrl || c.link,\n    title_raw: c.title,\n    content_raw: c.description || '',\n    publication_date: publicationDate,\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n    origin_type: resolved.originType,\n    canonical_url: resolved.canonicalUrl,\n    discovery_engine: 'google_news',\n  });\n}\n\nconst runTag = Date.now();\nconst dispatches = Object.entries(groups).map(([sourceId, g], i) => ({ json: {\n  source: g.source,\n  prefetched_items: g.items,\n  trigger_type: 'manual',\n  dispatched_at: new Date().toISOString(),\n  correlation_id: `discovery-${runTag}-${i}`,\n  requested_by: null,\n}}));\n\nconsole.log(JSON.stringify({\n  stage: 'discovery_resolve',\n  candidates_in: parsedCandidates.length,\n  after_dedup: seenTitles.size,\n  groups: dispatches.length,\n  official_groups: dispatches.filter((d) => d.json.source.ingestion_mode !== 'discovery').length,\n}));\n\nif (dispatches.length === 0) {\n  return [{ json: { __no_candidates: true } }];\n}\nreturn dispatches;"
+        "jsCode": "// ── OFFICIAL SOURCE RESOLUTION + GROUPING ───────────────────────────────────\n// Mirrors lib/discovery/discovery.ts (resolveDiscoveredItem), the tested\n// specification. Every candidate is deduplicated within this run, resolved\n// to an official source when the evidence is strong enough, and grouped by\n// its final target source so each group becomes ONE dispatch into Workflow\n// 02 — identical to how the scheduler dispatches one execution per source.\n//\n// Nothing here decides what gets PUBLISHED. Every group still goes through\n// Normalise RawItem, AI classification and the Publishing Gate exactly like\n// an official crawl. This only decides where an item's evidence trail points.\n//\n// \"Get official sources\" has no OTHER downstream connection, and n8n's\n// execution planner can skip a node that only some other node's expression\n// references via $('...') rather than a real graph edge (see\n// docs/n8n-fixes-2026-08-02.md, incident #5, for the identical failure mode\n// hit and fixed once already in this project). The fix here is the same:\n// \"Merge for resolution\" gives it a REAL edge into this node, and the two\n// input streams are told apart by shape — official source rows have\n// allowed_domains; parsed candidates have a title and a discoverySource —\n// exactly how \"Merge state\" in Workflows 01/04 already separates settings\n// rows from source rows.\nconst all = $input.all().map((i) => i.json);\n// Same in-memory filter as \"Filter discovery sources\" — only a source the\n// database itself would let the scheduler crawl may receive a resolved item.\n// Matching a candidate to a pending/blocked/unverified source would only be\n// caught later at the Publishing Gate (rule 1 re-reads it anyway), but\n// there is no reason to credit an item to a source that cannot publish it.\nconst officialSources = all.filter(\n  (r) => Array.isArray(r.allowed_domains) && r.ingestion_mode !== 'discovery' && r.active === true && r.config_status === 'verified',\n);\nconst parsedCandidates = all.filter((r) => typeof r.title === 'string' && r.discoverySource);\n\nfunction hostnameOf(url) {\n  const m = String(url || '').match(/^https?:\\/\\/([^/:?#]+)/i);\n  return m ? m[1].toLowerCase() : null;\n}\n\nfunction matchOfficialDomain(hostname) {\n  if (!hostname) return null;\n  const hit = officialSources.find((s) => (s.allowed_domains || []).some((d) => String(d).toLowerCase() === hostname));\n  return hit ? { sourceId: hit.id, method: 'domain_match', confidence: 100 } : null;\n}\n\nfunction matchAuthorityMention(title) {\n  const text = String(title || '').trim();\n  if (!text) return null;\n  let best = null;\n  for (const s of officialSources) {\n    for (const name of [s.authority_ar, s.authority_en]) {\n      const candidate = String(name || '').trim();\n      if (candidate.length < 4 || !text.includes(candidate)) continue;\n      const confidence = Math.min(95, 40 + candidate.length);\n      if (!best || confidence > best.confidence) {\n        best = { sourceId: s.id, method: 'authority_name_match', confidence, matchedName: candidate };\n      }\n    }\n  }\n  return best;\n}\n\nconst seenTitles = new Set();\nconst groups = {};\n\nfor (const c of parsedCandidates) {\n  const normTitle = c.title.replace(/\\s+/g, ' ').trim().toLowerCase();\n  if (!normTitle || seenTitles.has(normTitle)) continue;\n  seenTitles.add(normTitle);\n\n  const domainHit = matchOfficialDomain(hostnameOf(c.sourceUrl));\n  let resolved;\n  if (domainHit) {\n    resolved = { originType: 'official', sourceId: domainHit.sourceId, canonicalUrl: c.sourceUrl, verificationMethod: 'domain_match' };\n  } else {\n    const nameHit = matchAuthorityMention(c.title);\n    if (nameHit && nameHit.confidence >= 60) {\n      resolved = { originType: 'official', sourceId: nameHit.sourceId, canonicalUrl: null, verificationMethod: 'authority_name_match' };\n    } else {\n      resolved = { originType: 'discovery', sourceId: c.discoverySource.id, canonicalUrl: null, verificationMethod: null };\n    }\n  }\n\n  let publicationDate = null;\n  if (c.pubDate) {\n    const d = new Date(c.pubDate);\n    if (!Number.isNaN(d.getTime())) publicationDate = d.toISOString().slice(0, 10);\n  }\n\n  const groupSource = resolved.originType === 'official'\n    ? officialSources.find((s) => s.id === resolved.sourceId)\n    : c.discoverySource;\n  if (!groupSource) continue;\n\n  if (!groups[resolved.sourceId]) groups[resolved.sourceId] = { source: groupSource, items: [] };\n  groups[resolved.sourceId].items.push({\n    source_url: resolved.canonicalUrl || c.link,\n    title_raw: c.title,\n    content_raw: c.description || '',\n    publication_date: publicationDate,\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n    origin_type: resolved.originType,\n    canonical_url: resolved.canonicalUrl,\n    discovery_engine: 'google_news',\n  });\n}\n\nconst trigger = $('Called for catch-up').first().json;\nconst runTag = Date.now();\nconst dispatches = Object.entries(groups).map(([sourceId, g], i) => ({ json: {\n  source: g.source,\n  prefetched_items: g.items,\n  trigger_type: 'manual',\n  dispatched_at: new Date().toISOString(),\n  correlation_id: `discovery-${runTag}-${i}`,\n  requested_by: trigger.requested_by || null,\n  // Same catch-up window Workflow 04 computed — Normalise RawItem in\n  // Workflow 02 applies it uniformly to official and discovery items alike.\n  window_from: trigger.window_from || null,\n  window_to: trigger.window_to || null,\n}}));\n\nconsole.log(JSON.stringify({\n  stage: 'discovery_resolve',\n  candidates_in: parsedCandidates.length,\n  after_dedup: seenTitles.size,\n  groups: dispatches.length,\n  official_groups: dispatches.filter((d) => d.json.source.ingestion_mode !== 'discovery').length,\n}));\n\nif (dispatches.length === 0) {\n  return [{ json: { __no_candidates: true } }];\n}\nreturn dispatches;"
       },
       "id": "c6a01e5a-b8c9-4385-9b4e-b8a97dc17c8f",
       "name": "Resolve and group items",
@@ -264,22 +255,6 @@
     }
   ],
   "connections": {
-    "Every 2 hours": {
-      "main": [
-        [
-          {
-            "node": "Get discovery sources",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Get official sources",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Get discovery sources": {
       "main": [
         [
@@ -384,17 +359,30 @@
           }
         ]
       ]
+    },
+    "Called for catch-up": {
+      "main": [
+        [
+          {
+            "node": "Get discovery sources",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get official sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner"
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "staticData": {
-    "node:Every 2 hours": {
-      "recurrenceRules": []
-    }
-  },
+  "staticData": {},
   "meta": null,
   "pinData": null,
   "tags": []

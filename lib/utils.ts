@@ -25,6 +25,22 @@ export function formatDateAr(value: string | Date | null | undefined, timeZone =
   }).format(date)
 }
 
+/** Same as formatDateAr, plus the time — for "آخر تحديث ناجح: …" timestamps. */
+export function formatDateTimeAr(value: string | Date | null | undefined, timeZone = 'Asia/Riyadh'): string {
+  if (!value) return '—'
+  const date = typeof value === 'string' ? new Date(value) : value
+  if (Number.isNaN(date.getTime())) return '—'
+
+  return new Intl.DateTimeFormat('ar', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    timeZone,
+  }).format(date)
+}
+
 /**
  * Extracts a hostname for domain allow-list display. Returns null for input
  * that is not a parseable absolute URL rather than throwing.

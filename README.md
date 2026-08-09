@@ -1,12 +1,21 @@
 # منصة الرصد القانوني الخليجي — Legal Intelligence Platform
 
-Internal platform for the Legal Department. Continuously monitors official
-legal and regulatory sources across the GCC, classifies and summarizes
-updates with AI, and publishes them to a searchable internal archive.
+Internal platform for the Legal Department. On demand — never on a
+schedule — fetches official legal and regulatory sources across the GCC plus
+a Google News discovery layer, classifies and summarizes updates with AI, and
+publishes them to a searchable internal archive.
 
 **Internal system.** No public pages, no registration, no SEO, no billing. A
-small internal tool: Login, a dashboard of legal updates, and an admin
-section (Sources / Users / Settings). Nothing else.
+small internal tool: Login, a dashboard of legal updates (with a single
+"تحديث المستجدات" refresh button), and an admin section (Sources / Users /
+Settings). Nothing else.
+
+**No background ingestion.** There is no hourly scheduler and no recurring
+discovery poll — both were removed on purpose. The platform sits idle,
+making no Azure OpenAI calls and no outbound crawl requests, until an
+authenticated user clicks refresh. That refresh is a *catch-up*: it covers
+everything published since the last successful refresh, not a fixed lookback
+window. See [`n8n/README.md`](n8n/README.md) §0 and §7.
 
 ---
 
@@ -16,9 +25,9 @@ Three components. n8n is the only orchestrator.
 
 | Component | Owns | Never does |
 |---|---|---|
-| **n8n** | Scheduling, crawling, parsing, AI classification, publishing rules, notifications | — |
+| **n8n** | On-demand crawling, parsing, AI classification, publishing rules | Run on a schedule |
 | **Supabase** | Postgres, Auth, Storage, RLS. Integrity constraints only | Hold business rules |
-| **Next.js** | Dashboard, archive, search, admin (sources / users / settings) | Write `legal_updates`. Orchestrate anything |
+| **Next.js** | Dashboard (incl. the refresh trigger), archive, search, admin (sources / users / settings) | Write `legal_updates`. Orchestrate ingestion itself |
 
 `legal_updates` is write-sealed against the web application: no write policy
 exists for `authenticated`, and INSERT/UPDATE/DELETE are explicitly revoked.
@@ -149,9 +158,15 @@ changing both together.
 
 ## Schema
 
-Four tables: `users`, `sources`, `legal_updates`, `app_settings`. See
-`supabase/migrations/0023_simplify_platform.sql` for what was removed —
-execution history, health snapshots, dead-letter queue, the manual-run
-idempotency ledger, and the newsletter — and why (that operational machinery
-served admin UI this platform no longer has; retries are now n8n's own
-per-node `retryOnFail`, not a database-backed queue).
+Five tables: `users`, `sources`, `legal_updates`, `app_settings`,
+`ingestion_runs`. See `supabase/migrations/0023_simplify_platform.sql` for
+what was removed — execution history, health snapshots, dead-letter queue,
+the old manual-run idempotency ledger, and the newsletter — and why (that
+operational machinery served admin UI this platform no longer has; retries
+are now n8n's own per-node `retryOnFail`, not a database-backed queue).
+
+`ingestion_runs` (migration 0024) is not a re-introduction of that machinery —
+it is the minimum state the manual catch-up refresh needs: a single-flight
+lock, the completion state the dashboard polls, and the last-successful-run
+checkpoint the next refresh's window is computed from. See
+[`n8n/README.md`](n8n/README.md) §7.

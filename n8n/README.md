@@ -1,38 +1,66 @@
 # n8n — workflows and setup
 
-n8n is the only orchestrator. It schedules, crawls, parses, classifies, decides
-what publishes, and handles manual runs. The database stores state; the web
-app reads it.
+n8n crawls, parses, classifies and decides what publishes. The database
+stores state; the web app reads it. There is **no scheduling** any more — see
+"Why no schedulers" below.
 
 ```
 workflows/
-  01-source-scheduler.json      hourly dispatcher — picks due sources
+  01-source-scheduler.json      DEACTIVATED on the live instance — dead code kept
+                                 for its due-source logic, not currently reachable
   02-source-ingestion.json      four parser lanes → normalise → Azure AI classify
   03-publishing-gate.json       the publishing rules + archive insert
-  04-manual-run.json            webhook → run 02 for the requested scope
+  04-manual-run.json            the ONLY ingestion trigger — the catch-up refresh
   05-discovery-ingestion.json   Google News → resolve → same pipeline
+                                 (callable-only — no schedule of its own either)
 ```
 
 Architecturally this is three workflows:
 
-- **Workflow 1 — ingestion.** `01` (scheduler) and `05` (discovery) both
-  dispatch into `02` (fetch → normalise → classify) which calls `03`
-  (publish). Four files because n8n sub-workflows are how retries, discovery,
-  and the manual trigger all reuse the same pipeline without a second copy of
-  its rules — not four independent pipelines.
-- **Workflow 2 — manual run.** `04`: a webhook that resolves a scope (one
-  source / a country / everything) to a source set and runs Workflow 1 for
-  them. Nothing else — no idempotency ledger, no lock, no dead-letter queue.
+- **Workflow 1 — ingestion.** `04` (the catch-up refresh) dispatches into `02`
+  (fetch → normalise → classify) which calls `03` (publish), and separately
+  into `05` (discovery), which dispatches its own resolved groups into `02`
+  the same way. Sub-workflows are how the manual trigger and discovery reuse
+  the same pipeline without a second copy of its rules — not independent
+  pipelines.
+- **Workflow 2 — manual run.** `04`: a webhook that computes a catch-up
+  window from the last successful refresh, guards against a concurrent
+  duplicate, and dispatches Workflow 1 for every currently eligible source —
+  official and discovery alike. See §7.
 - **Workflow 3 — retry.** Not a separate file. Every HTTP node that calls an
   external service (the four fetch lanes, the AI classification call) has
   n8n's native `retryOnFail` set directly on the node — 3 attempts with a wait
   between them, isolated per node so one dead source or a transient AI 5xx
-  doesn't fail the whole run. See §4 for the exact settings. A standalone
-  scheduled retry-sweep workflow would have nothing to read from: the
-  dead-letter table and the source-level retry columns it used to sweep were
-  both removed as part of the simplification.
+  doesn't fail the whole run. See §4 for the exact settings.
 
 ---
+
+## 0. Why no schedulers
+
+The platform is an internal tool used by a handful of people, not a
+continuously-monitored feed. It must sit **idle** — no Azure OpenAI spend, no
+outbound crawl traffic — until someone actually opens the dashboard and clicks
+**"تحديث المستجدات"**.
+
+Both `01 — Source Scheduler` (previously hourly) and `05 — Discovery
+Ingestion` (previously every 2 hours) ran on `n8n-nodes-base.scheduleTrigger`
+nodes. That behaviour is gone:
+
+- **`01`** is **deactivated** on the live instance. Its node graph — the
+  due-source selection logic, `poll_interval_minutes`/`next_run_at` handling —
+  is left in place and in this repo, unreachable, in case a future scheduled
+  mode is ever reintroduced. It is not deleted, per the instruction that
+  disabled it: disable the trigger, don't delete working logic.
+- **`05`**'s Schedule Trigger node was **replaced**, not just deactivated,
+  with an `executeWorkflowTrigger` — the same node type `02` and `03` use to
+  be callable sub-workflows. `05` is now reachable ONLY when `04` calls it; it
+  has no trigger of its own to disable. (A workflow can carry only one
+  trigger-type node, which is what forced a replacement instead of leaving
+  both side by side.)
+
+The one thing that still calls Azure OpenAI or fetches a source is a human
+clicking the button, or an authorized direct call to the same webhook. There
+is nothing else pointed at either.
 
 ## 1. Prerequisites
 
@@ -61,37 +89,39 @@ never in `.env.local`, never in `app_settings`.
 | Header Auth | `Azure OpenAI account` | Name = `api-key`, Value = your Azure OpenAI resource key |
 
 The `service_role` key bypasses RLS and is the **only** write path into the
-archive.
+archive (and, since migration 0024, the only writer of `ingestion_runs`).
 
 The `Azure OpenAI account` credential's key is sent as the `api-key` header on
 every call to `Classify with AI` in `02 — Source Ingestion`. The node's URL
 already carries the endpoint, deployment name, and API version — only the key
 itself lives in the credential.
 
+A **third** credential, Header Auth, protects the manual-run webhook itself
+(`X-Trigger-Secret` header). Its value is the app's `N8N_TRIGGER_SECRET`
+(`.env.local`, server-only — never sent to the browser). The Next.js Server
+Action that calls the webhook is the only place this secret is used on the
+app side.
+
 The workflow exports reference credentials by name; a test asserts no key is
 ever inlined into the JSON.
 
 ## 3. Import
 
-n8n → Workflows → Import from File, one file at a time, in order (01 → 02 →
-03 → 04 → 05). Then open `01 — Source Scheduler`, `04 — Manual Run`, and
-`05 — Discovery Ingestion` and re-point their **Execute Workflow** nodes at
-the imported `02 — Source Ingestion` and `03 — Publishing Gate` (n8n stores
-workflow references by internal id, which differs per instance).
+n8n → Workflows → Import from File, one file at a time (order doesn't matter
+functionally any more, since nothing auto-fires, but 02 → 03 → 04 → 05 → 01
+is a reasonable order). Then open `04 — Manual Run` and `05 — Discovery
+Ingestion` and re-point their **Execute Workflow** nodes at the imported
+`02 — Source Ingestion` / `03 — Publishing Gate` / `05 — Discovery Ingestion`
+(n8n stores workflow references by internal id, which differs per instance).
 
-Activate `01 — Source Scheduler`, `04 — Manual Run`, and
-`05 — Discovery Ingestion`. `02` and `03` are sub-workflows, invoked by the
-others — never triggered directly.
+**Activate `02`, `03`, `04` and `05`.** All four are either the webhook
+entry point (`04`) or callable-only sub-workflows (`02`, `03`, `05`) — in n8n,
+"active" is what makes a sub-workflow reachable via Execute Workflow, not only
+what makes a schedule fire. **Leave `01` deactivated** — see §0.
 
 ## 4. How ingestion works
 
-**Scheduler (hourly).** Reads `app_settings` and all active sources, then
-decides in a Code node which are due — the polling policy lives in n8n, not in
-the database. A source is skipped unless it is `active`, `config_status =
-'verified'`, has a real parser type, and its `next_run_at` has passed.
-
-**Ingestion (per source).** A Switch on `parser_type` routes to one of four
-lanes:
+**Per-source fetch.** A Switch on `parser_type` routes to one of four lanes:
 
 | Lane | Fetches | Uses from `parser_config` |
 |---|---|---|
@@ -121,12 +151,19 @@ All four converge on one normaliser producing the shared `RawItem`:
 }
 ```
 
+**Catch-up windowing.** When the dispatching call (always `04` now) carries a
+`window_from` on the trigger payload, `Normalise RawItem` drops any item whose
+`publication_date` is older than it (`out_of_window`) — see §7. Absent
+`window_from`, this is a no-op, so the same normaliser works unchanged for any
+possible future caller that doesn't set one.
+
 **Failure isolation and retry (Workflow 3, in practice).** Every fetch lane
 HTTP node has `retryOnFail: true, maxTries: 3, waitBetweenTries: 2000` and
 `onError: continueErrorOutput` — one unreachable source retries three times
-then fails in isolation, never stopping the others in the same tick. The
+then fails in isolation, never stopping the others in the same run. The
 `Classify with AI` node carries the same pattern (`maxTries: 3,
-waitBetweenTries: 5000`).
+waitBetweenTries: 5000`). A per-source failure like this does **not** fail
+the whole catch-up run or block the checkpoint from advancing — see §7.
 
 ## 5. Classification and publishing
 
@@ -148,9 +185,9 @@ confidence score at all; the only classification-time rejection is
 matching the `^[a-f0-9]{64}$` CHECK).
 
 **`03 — Publishing Gate`** is the only code that decides what enters the
-archive. Scheduled ingestion, discovery, and manual runs all call it, so the
-rules cannot drift between callers. What's left, now that the AI decision and
-the confidence gate are both upstream, is structural:
+archive. Every caller of Workflow 1 goes through it, so the rules cannot
+drift between callers. What's left, now that the AI decision and the window
+filter are both upstream, is structural:
 
 | Rule | Rejection reason |
 |---|---|
@@ -163,7 +200,8 @@ Rule 1 re-reads the source rather than trusting the crawl payload — an admin
 may have deactivated or un-verified it while the item was in flight.
 
 A unique-violation on insert is classified as `duplicate`, not a failure: that
-is the concurrent-execution race the constraint exists for.
+is the concurrent-execution race the constraint exists for. The same is true,
+one level up, of a unique-violation on **inserting `ingestion_runs`** — see §7.
 
 ## 6. Hybrid discovery
 
@@ -173,7 +211,8 @@ registry sources), `discovery`, or `hybrid`. It is a different axis from
 gcc/approved_news) — a discovery pseudo-source's `source_type` is the
 `discovery_engine` value, orthogonal to how it is reached.
 
-**`05 — Discovery Ingestion`** runs every 2 hours:
+**`05 — Discovery Ingestion`** is now callable-only (§0) — it runs exactly
+when `04` invokes it, once per catch-up refresh:
 
 1. Fetches each active `ingestion_mode = 'discovery'` source's `feed_url` —
    one Google News RSS query per GCC country.
@@ -185,8 +224,9 @@ gcc/approved_news) — a discovery pseudo-source's `source_type` is the
    `domain_match` or a strong `authority_name_match` (confidence ≥ 60)
    promotes the item to `origin_type = official` with that source's own id;
    anything weaker keeps `origin_type = 'discovery'`.
-4. Groups resolved candidates by target source and dispatches each group into
-   `02 — Source Ingestion` exactly like the scheduler does — via a
+4. Groups resolved candidates by target source, stamps each group with the
+   catch-up window `04` handed it, and dispatches each group into
+   `02 — Source Ingestion` exactly like an official-source dispatch — via a
    `prefetched_items` bypass (`Has prefetched items?` → `Unwrap prefetched
    items` → `Normalise RawItem`) that skips the four fetch lanes entirely.
 
@@ -194,27 +234,74 @@ gcc/approved_news) — a discovery pseudo-source's `source_type` is the
 — in `Normalise RawItem` AND independently re-checked in the Publishing
 Gate (both re-derive `isDiscoverySource` from the re-read source row, never
 trust a flag carried on the item). Every other rule — duplicate hash,
-`is_legal_update`, publication date — applies identically.
+`is_legal_update`, publication date, the catch-up window — applies
+identically to discovery and official items.
 
 `legal_updates.origin_type` (`official`/`discovery`), `canonical_url`, and
 `discovery_engine` record, per item, how it was actually found.
 
-## 7. Manual run
+## 7. The manual catch-up refresh
 
-**`04 — Manual Run`** is a webhook (`POST /webhook/legal-ingestion-run`,
-header-auth protected by `N8N_TRIGGER_SECRET`) that:
+**`04 — Manual Run`** is the platform's only ingestion trigger — a webhook
+(`POST /webhook/legal-ingestion-run`, header-auth protected by the
+`X-Trigger-Secret` credential, §2) that the dashboard's "تحديث المستجدات"
+button calls through a Next.js Server Action.
 
-1. Validates the request body — `scope` is one of `source` / `country` /
-   `all` / `url`, with the scope-specific field required.
-2. Resolves the scope to a source set, filtered to what the scheduler would
-   run anyway (`active`, `config_status = 'verified'`, a real parser type).
-3. Dispatches Workflow 1 (`02 — Source Ingestion`) once per resolved source,
-   without waiting for it to finish (`waitForSubWorkflow: false`), and
-   answers immediately.
-4. Responds with `202 accepted` / `404 rejected` (unknown source) /
-   `200 skipped` (nothing matched) / `500 failed` (dispatch itself couldn't
-   start).
+It is a **catch-up** refresh, not a fixed "last N hours" poll: every run
+covers everything published since the last successful refresh, however long
+ago that was.
 
-There is no idempotency ledger for a retried request and no source lock —
-both existed only to support the operational admin UI this platform no longer
-has. A manual run is a plain, stateless dispatch.
+1. **`Parse request`** — reads the optional `requested_by` (a user id, for
+   attribution). Nothing else to validate: there is no scope any more (the
+   old source/country/url scopes were dead code — no UI ever called them).
+   Every refresh covers every currently eligible source.
+2. **`Get running run` / `Get last succeeded run`** query `ingestion_runs`
+   (migration 0024) in parallel, then **`Compute window & guard`** decides:
+   - If a row is `status = 'running'`, this request is rejected as
+     `already_running` (§ single-flight, below) — no dispatch happens.
+   - Otherwise, `window_from` is the latest **`succeeded`** row's `window_to`
+     minus a 6-hour safety overlap, or — if there has never been a successful
+     refresh — 7 days before now (a bounded initial lookback, never an
+     unlimited historical backfill). `window_to` is always "now".
+3. **`Insert running run`** writes the new `status = 'running'` row. A
+   unique-violation here (two requests racing past step 2 at once) is treated
+   exactly like the ordinary already-running case, not as an error.
+4. The insert's success fans out into **three parallel branches**:
+   - **`Respond: accepted`** answers the HTTP request immediately (`202`,
+     with the run id and window) — the client is never blocked on what
+     follows.
+   - **`Prepare official dispatch` → `Dispatch official ingestion`** resolves
+     every `active` + `verified` + non-`discovery` source (the same
+     eligibility the old scheduler enforced) and calls `02` once per source,
+     **waiting** for each — safe now that the client already has its
+     response on the branch above.
+   - **`Prepare discovery dispatch` → `Dispatch discovery catch-up`** calls
+     `05` once (it fans out to every discovery source and resolved group
+     internally), also waiting.
+5. **`Finalize run`** aggregates `items_published` across every result from
+   both dispatch branches and writes `status = 'succeeded'` (or `'failed'`,
+   only if every single dispatch failed to even start — an isolated
+   per-source fetch failure inside `02`/`03` does **not** fail the whole run,
+   consistent with §4's per-node retry isolation) plus `items_inserted` and
+   `completed_at` back onto the `ingestion_runs` row via **`Update run row`**.
+   The dashboard polls this row (via a Server Action, not directly) to know
+   when to show a result and revalidate.
+
+**Single-flight lock.** Two layers: the pre-check read in step 2, and — for
+the race it cannot catch — a Postgres partial unique index,
+`ingestion_runs_one_active`, that permits at most one `status = 'running'`
+row to exist at all (migration 0024). The insert in step 3 simply cannot
+succeed a second time while one is in flight; there is no source-level lock
+column any more (`sources.lock_expires_at` and the rest of that machinery
+were dropped along with the other ops columns).
+
+**The checkpoint only ever advances on success.** `Compute window & guard`
+only ever reads `status = 'succeeded'` rows when picking `window_from` — a
+`'failed'` or still-`'running'` row is invisible to it. A refresh that dies
+partway through cannot shrink the next run's coverage or create a silent
+gap; at worst the next refresh's window is wider than strictly necessary,
+which deduplication (content_hash) absorbs for free.
+
+There is no idempotency ledger keyed by client-retried correlation id — the
+single-flight lock above already makes a retried "click refresh again" safe
+without one.

@@ -17,6 +17,15 @@ const serverEnvSchema = z.object({
     .string()
     .min(1, { error: 'NEXT_PUBLIC_SUPABASE_ANON_KEY is required' }),
 
+  /**
+   * The manual catch-up refresh's only external call. Both optional: the
+   * "تحديث المستجدات" action fails closed with an explanation when either is
+   * missing, rather than firing an unauthenticated request or crashing the
+   * whole app at boot over one feature's config.
+   */
+  N8N_TRIGGER_WEBHOOK_URL: z.url({ error: 'N8N_TRIGGER_WEBHOOK_URL must be a valid URL' }).optional(),
+  N8N_TRIGGER_SECRET: z.string().min(1).optional(),
+
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 })
 
@@ -37,6 +46,8 @@ export function getServerEnv(): ServerEnv {
   const parsed = serverEnvSchema.safeParse({
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    N8N_TRIGGER_WEBHOOK_URL: process.env.N8N_TRIGGER_WEBHOOK_URL,
+    N8N_TRIGGER_SECRET: process.env.N8N_TRIGGER_SECRET,
     NODE_ENV: process.env.NODE_ENV,
   })
 
