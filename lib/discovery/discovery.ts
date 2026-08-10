@@ -168,7 +168,13 @@ const COUNTRY_NAMES_AR: Record<GccCountryCode, string> = {
   KW: 'الكويت',
   QA: 'قطر',
   BH: 'البحرين',
-  OM: 'عمان',
+  // Deliberately 'سلطنة عمان' ("Sultanate of Oman"), not the bare 'عمان'.
+  // Undiacritized 'عمان' is the same string real-world text uses for both
+  // Oman and 'عمّان' (Amman, Jordan's capital) — Arabic news text virtually
+  // never carries the shadda that would disambiguate them in writing. The
+  // bare form pulled Jordanian/Amman news into this feed; the full official
+  // name of the Sultanate is not how Amman is ever referred to.
+  OM: 'سلطنة عمان',
 }
 
 /**
