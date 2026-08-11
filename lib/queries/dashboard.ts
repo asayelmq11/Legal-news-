@@ -1,10 +1,10 @@
 import 'server-only'
 
 import {
-  CONTENT_TYPE_KEYS,
+  DASHBOARD_KPI_GROUP_KEYS,
   LEGISLATIVE_DOCUMENT_TYPES,
-  resolveContentType,
-  type ContentTypeKey,
+  resolveDashboardKpiGroup,
+  type DashboardKpiGroup,
 } from '@/lib/constants/content-type'
 import { createClient } from '@/lib/supabase/server'
 import { COUNTRY_CODES, type CountryCode } from '@/lib/constants/countries'
@@ -100,39 +100,44 @@ export async function getLegalOverview(): Promise<DashboardResult<LegalOverview>
 }
 
 /**
- * "مؤشرات حسب نوع المستجد" — one row per record, bucketed client-side by
- * `resolveContentType` (the same function the archive's "نوع المحتوى" filter
- * is built from, so the dashboard chart and the filter can never disagree on
- * what counts as an amendment or a case). Fetches only the three thin columns
- * needed to bucket, not full rows — the archive is small enough (a few
- * hundred rows) that this beats maintaining six separate count queries that
- * would have to be hand-kept in sync with the bucket rules instead.
+ * The Dashboard KPI strip's four-way breakdown — one row per record,
+ * bucketed client-side by `resolveDashboardKpiGroup`, keyed off
+ * `document_type` alone so the four counts are a true partition: they
+ * always sum to `classifiedTotal`, which itself equals the platform total
+ * whenever every row is classified. (This is deliberately a different,
+ * narrower grouping than the archive's "نوع المحتوى" filter — see
+ * `resolveDashboardKpiGroup`'s own doc comment for why the two must not be
+ * unified.) Fetches only the one column needed to bucket, not full rows —
+ * the archive is small enough (a few hundred rows) that this beats
+ * maintaining four separate count queries that would have to be hand-kept
+ * in sync with the bucket rules instead.
  *
- * `unclassified` (document_type IS NULL — records from before this field was
- * re-enabled) is kept as its own bucket rather than folded into another one
- * or silently dropped: hiding it would overstate how much of the archive is
- * actually typed.
+ * `unclassified` (document_type IS NULL — records from before this field
+ * was re-enabled) is kept as its own bucket rather than folded into another
+ * one or silently dropped: hiding it would overstate how much of the
+ * archive is actually typed. It is excluded from the four-group sum on
+ * purpose.
  */
 export interface DocumentTypeDistribution {
-  buckets: Bucket<ContentTypeKey | 'unclassified'>[]
+  buckets: Bucket<DashboardKpiGroup | 'unclassified'>[]
   classifiedTotal: number
 }
 
 export async function getDocumentTypeDistribution(): Promise<DashboardResult<DocumentTypeDistribution>> {
   const supabase = await createClient()
-  const { data, error } = await supabase.from('legal_updates').select('document_type, legal_status, category')
+  const { data, error } = await supabase.from('legal_updates').select('document_type')
 
   if (error) return { ok: false, error: error.message }
 
-  const counts = new Map<ContentTypeKey | 'unclassified', number>()
+  const counts = new Map<DashboardKpiGroup | 'unclassified', number>()
   let classifiedTotal = 0
   for (const row of data ?? []) {
-    const bucket = resolveContentType(row)
+    const bucket = resolveDashboardKpiGroup(row.document_type)
     counts.set(bucket, (counts.get(bucket) ?? 0) + 1)
     if (bucket !== 'unclassified') classifiedTotal += 1
   }
 
-  const order: readonly (ContentTypeKey | 'unclassified')[] = [...CONTENT_TYPE_KEYS, 'unclassified']
+  const order: readonly (DashboardKpiGroup | 'unclassified')[] = [...DASHBOARD_KPI_GROUP_KEYS, 'unclassified']
   const buckets = order
     .map((key) => ({ key, count: counts.get(key) ?? 0 }))
     .filter((b) => b.count > 0)

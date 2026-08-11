@@ -113,3 +113,54 @@ export const LEGISLATIVE_DOCUMENT_TYPES: readonly DocumentType[] = [
   'circular',
   'official_notice',
 ]
+
+/**
+ * The Dashboard KPI strip's four content-type cards — a *partition* of
+ * `document_type`, not a filter: every row with a non-null `document_type`
+ * falls into exactly one of these four, so the four counts always sum to
+ * the classified total. This is deliberately a different, simpler grouping
+ * than `resolveContentType` above: that one keys `amendment` off
+ * `legal_status` and `case` off `category` too (useful for the archive's
+ * filter, where "show me amendments" is a legitimate cross-cutting query),
+ * which is exactly why summing ITS buckets does not equal the total — a
+ * `law` row with `legal_status = amended` counts once, under `amendment`,
+ * so `law` undercounts by however many amendments happen to be laws. The
+ * KPI strip needs the other property (a clean breakdown of "what is this
+ * archive made of"), so it uses `document_type` alone, with no
+ * `legal_status`/`category` override.
+ */
+export const DASHBOARD_KPI_GROUP_KEYS = ['legislative', 'decision', 'case', 'other'] as const
+export type DashboardKpiGroup = (typeof DASHBOARD_KPI_GROUP_KEYS)[number]
+
+export const DASHBOARD_KPI_GROUP_LABELS_AR: Readonly<Record<DashboardKpiGroup, string>> = {
+  legislative: 'تشريعات وتنظيمات',
+  decision: 'قرارات وتعاميم',
+  case: 'قضايا وأحكام',
+  other: 'محتوى قانوني آخر',
+}
+
+const DOCUMENT_TYPES_BY_KPI_GROUP: Readonly<Record<DashboardKpiGroup, readonly DocumentType[]>> = {
+  legislative: ['law', 'royal_decree', 'executive_regulation', 'regulatory_framework'],
+  decision: ['ministerial_decision', 'circular', 'official_notice'],
+  case: ['court_precedent'],
+  other: ['other', 'consultation_draft'],
+}
+
+/**
+ * Buckets a row for the KPI strip. `document_type = null` (a record from
+ * before this field existed) is `'unclassified'` and excluded from the
+ * four-group sum, exactly like `resolveContentType`'s own `unclassified`
+ * handling — the strip's footnote makes that count visible rather than
+ * silently folding it into one of the four and overstating that group.
+ */
+export function resolveDashboardKpiGroup(documentType: DocumentType | null): DashboardKpiGroup | 'unclassified' {
+  if (documentType === null) return 'unclassified'
+  for (const key of DASHBOARD_KPI_GROUP_KEYS) {
+    if ((DOCUMENT_TYPES_BY_KPI_GROUP[key] as readonly string[]).includes(documentType)) return key
+  }
+  // Unreachable while DOCUMENT_TYPES_BY_KPI_GROUP covers every DocumentType
+  // member (enforced by the exhaustiveness test in content-type.test.ts) —
+  // kept as a safe fallback rather than a thrown error, since a KPI strip
+  // is exactly the wrong place to crash the dashboard over a taxonomy gap.
+  return 'other'
+}

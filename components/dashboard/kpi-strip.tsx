@@ -1,30 +1,22 @@
-import type { ContentTypeKey } from '@/lib/constants/content-type'
+import { DASHBOARD_KPI_GROUP_KEYS, DASHBOARD_KPI_GROUP_LABELS_AR } from '@/lib/constants/content-type'
 import type { DocumentTypeDistribution } from '@/lib/queries/dashboard'
 import { cn } from '@/lib/utils'
 
 /**
  * The Executive Summary strip. `إجمالي المستجدات` is the one figure this
  * platform is fully sure of (every published row, classified or not) and
- * stays pinned first with the loud "primary" tile treatment; the four
- * type-based tiles are read off `distribution` — the same client-side
- * bucketing "مؤشرات حسب نوع المستجد" charts below — and a tile is only shown
- * when its count is greater than zero, so the strip never states a number
- * for a type this archive currently has none of.
+ * stays pinned first with the loud "primary" tile treatment. The four
+ * type-based tiles are a strict partition of `document_type` (see
+ * `resolveDashboardKpiGroup`) — they always sum to `distribution.classifiedTotal`,
+ * shown together with `totalUpdates` in the footnote whenever the two
+ * differ. A tile still hides at zero, so the strip never states a number
+ * for a group this archive currently has none of — that just can't make
+ * the four stop summing to the classified total, since a hidden zero
+ * contributes nothing either way.
  *
  * Proportional (non-tabular) figures per the dataviz skill's stat-tile spec:
  * these are large standalone numbers, not a column needing vertical alignment.
  */
-const KPI_TYPE_ORDER: readonly ContentTypeKey[] = ['law', 'amendment', 'decision', 'case']
-
-const KPI_TYPE_LABELS_AR: Readonly<Record<ContentTypeKey, string>> = {
-  law: 'تشريعات جديدة',
-  amendment: 'تعديلات',
-  regulation: 'لوائح وأنظمة تنفيذية',
-  decision: 'قرارات وتعاميم',
-  case: 'قضايا وأحكام',
-  other: 'أخرى',
-}
-
 export function KpiStrip({
   totalUpdates,
   distribution,
@@ -32,13 +24,15 @@ export function KpiStrip({
   totalUpdates: number
   distribution: DocumentTypeDistribution
 }) {
-  const countOf = (key: ContentTypeKey) => distribution.buckets.find((b) => b.key === key)?.count ?? 0
+  const countOf = (key: (typeof DASHBOARD_KPI_GROUP_KEYS)[number]) =>
+    distribution.buckets.find((b) => b.key === key)?.count ?? 0
 
   const tiles: Array<{ label: string; value: number; primary?: boolean }> = [
     { label: 'إجمالي المستجدات', value: totalUpdates, primary: true },
-    ...KPI_TYPE_ORDER.map((key) => ({ label: KPI_TYPE_LABELS_AR[key], value: countOf(key) })).filter(
-      (tile) => tile.value > 0,
-    ),
+    ...DASHBOARD_KPI_GROUP_KEYS.map((key) => ({
+      label: DASHBOARD_KPI_GROUP_LABELS_AR[key],
+      value: countOf(key),
+    })).filter((tile) => tile.value > 0),
   ]
 
   const unclassifiedCount = distribution.buckets.find((b) => b.key === 'unclassified')?.count ?? 0

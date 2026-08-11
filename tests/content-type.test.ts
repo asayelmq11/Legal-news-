@@ -3,8 +3,12 @@ import { describe, expect, it } from 'vitest'
 import {
   CONTENT_TYPE_KEYS,
   contentTypeOrExpr,
+  DASHBOARD_KPI_GROUP_KEYS,
+  DASHBOARD_KPI_GROUP_LABELS_AR,
   resolveContentType,
+  resolveDashboardKpiGroup,
 } from '@/lib/constants/content-type'
+import { DOCUMENT_TYPES } from '@/lib/constants/taxonomy'
 
 describe('resolveContentType', () => {
   it('is unclassified when document_type is null — never guessed', () => {
@@ -75,5 +79,60 @@ describe('contentTypeOrExpr', () => {
 
   it('the amendment bucket keys off legal_status, not document_type', () => {
     expect(contentTypeOrExpr('amendment')).toBe('legal_status.eq.amended')
+  })
+})
+
+describe('resolveDashboardKpiGroup — the KPI strip\'s partition of document_type', () => {
+  it('is unclassified when document_type is null — never guessed', () => {
+    expect(resolveDashboardKpiGroup(null)).toBe('unclassified')
+  })
+
+  it('groups per the KPI spec: legislative, decision, case, other', () => {
+    expect(resolveDashboardKpiGroup('law')).toBe('legislative')
+    expect(resolveDashboardKpiGroup('royal_decree')).toBe('legislative')
+    expect(resolveDashboardKpiGroup('executive_regulation')).toBe('legislative')
+    expect(resolveDashboardKpiGroup('regulatory_framework')).toBe('legislative')
+
+    expect(resolveDashboardKpiGroup('ministerial_decision')).toBe('decision')
+    expect(resolveDashboardKpiGroup('circular')).toBe('decision')
+    expect(resolveDashboardKpiGroup('official_notice')).toBe('decision')
+
+    expect(resolveDashboardKpiGroup('court_precedent')).toBe('case')
+
+    expect(resolveDashboardKpiGroup('other')).toBe('other')
+    expect(resolveDashboardKpiGroup('consultation_draft')).toBe('other')
+  })
+
+  it('never keys off legal_status or category — a law flagged amended is still legislative, not amendment', () => {
+    // resolveDashboardKpiGroup only ever takes document_type at all — the
+    // type signature itself proves legal_status/category cannot influence
+    // it, but the point of this test is documentation: unlike
+    // resolveContentType, this function must never grow that override.
+    expect(resolveDashboardKpiGroup('law')).toBe('legislative')
+  })
+
+  it('every DocumentType is covered by exactly one KPI group — a true partition, no gaps or overlaps', () => {
+    for (const dt of DOCUMENT_TYPES) {
+      const matches = DASHBOARD_KPI_GROUP_KEYS.filter((key) => resolveDashboardKpiGroup(dt) === key)
+      expect(matches, `document_type=${dt} must resolve to exactly one KPI group`).toHaveLength(1)
+    }
+    // And the reverse: every group has a label, and the four groups are the whole set.
+    expect(DASHBOARD_KPI_GROUP_KEYS).toHaveLength(4)
+    for (const key of DASHBOARD_KPI_GROUP_KEYS) {
+      expect(DASHBOARD_KPI_GROUP_LABELS_AR[key]).toBeTruthy()
+    }
+  })
+
+  it('the four groups sum to the total for a mixed batch — the property the KPI strip relies on', () => {
+    const rows: Array<{ document_type: (typeof DOCUMENT_TYPES)[number] | null }> = DOCUMENT_TYPES.map((dt) => ({
+      document_type: dt,
+    }))
+    const counts = new Map<string, number>()
+    for (const row of rows) {
+      const bucket = resolveDashboardKpiGroup(row.document_type)
+      counts.set(bucket, (counts.get(bucket) ?? 0) + 1)
+    }
+    const sum = DASHBOARD_KPI_GROUP_KEYS.reduce((acc, key) => acc + (counts.get(key) ?? 0), 0)
+    expect(sum).toBe(rows.length)
   })
 })
