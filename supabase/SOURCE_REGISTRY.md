@@ -1,35 +1,42 @@
 # Source registry — contents and activation procedure
 
-52 official sources across the six GCC states and two GCC-wide bodies, plus
-(M13) 6 discovery pseudo-sources — one per GCC country, `ingestion_mode =
-'discovery'`, `source_type = 'discovery_engine'` — that are not authorities
-themselves. Everything below describes the 52 OFFICIAL sources; see
+> **2026-08-11 — registry finalized for delivery.** The platform originally
+> seeded 52 official sources (below, "Original 52-source seed") plus 12
+> discovery pseudo-sources. After the production-egress verification pass and
+> a final go/no-go review of every still-pending source, the **live registry
+> now holds 16 official sources** (14 active, 2 pending) **+ 12 discovery
+> pseudo-sources = 28 total**. 36 official sources were removed — each had a
+> confirmed, unrecoverable blocker (persistent WAF/network block from the
+> production egress, no discoverable RSS/JSON/HTML route after a real audit,
+> or an API with no provable, non-guessed request contract) and **zero**
+> `legal_updates` rows attached, checked individually before each removal. See
+> [Current live registry](#current-live-registry) below for the up-to-date
+> table; the per-country tables further down are the **original seed**,
+> preserved for history and for anyone re-evaluating a removed source.
+
+12 discovery pseudo-sources — one Google News legal-update feed and one
+Google News case-law feed per GCC country, `ingestion_mode = 'discovery'`,
+`source_type = 'discovery_engine'` — are not authorities themselves; see
 [`docs/hybrid-discovery-architecture-2026-08-03.md`](../docs/hybrid-discovery-architecture-2026-08-03.md)
 for the discovery layer, and `n8n/README.md` §6 for how the two interact.
 `ingestion_mode` (official/discovery/hybrid) is a different axis from
 `source_type` below — it classifies HOW a source is reached, not WHAT kind
 of authority it is.
 
-**Case-law discovery (6 more, migration `0026`).** One more discovery
-pseudo-source per GCC country (never GCC itself — a case is attributed to the
-country it happened in), parallel to and fully independent of the six
-legal-update discovery feeds above: same `discovery_engine`/`discovery`
-shape, but querying `CASE_LAW_PHRASES` (`lib/discovery/discovery.ts`) —
-court/ruling/precedent terms — instead of the legislative phrase set. No
-judicial (Supreme/Cassation/Public Prosecution) source exists yet among the
-52 official sources; those sites are expected to sit behind the same WAFs
-documented in `docs/source-provisioning-2026-08-02.md`, so discovery is the
-proven path here too. Feeds "آخر القضايا" in the UI via `category =
-'litigation'` — no schema change. The classify prompt (
-`n8n/prompts/classify-legal-update.md`) carries the quality bar: rejects
-generic crime/accident/celebrity/tabloid content that merely mentions a
-court in passing, accepts only content with genuine legal/professional
-value.
-
-**Every source ships inactive and unverified.** Nothing will be crawled until a
-person opens the site, works out how to read it, and switches it on — from the
-production egress. This page is how that is done; the connectivity record lives
-in [`docs/EGRESS_VERIFICATION.md`](../docs/EGRESS_VERIFICATION.md).
+**Case-law discovery (migration `0026`).** One discovery pseudo-source per
+GCC country (never GCC itself — a case is attributed to the country it
+happened in), parallel to and fully independent of the six legal-update
+discovery feeds: same `discovery_engine`/`discovery` shape, but querying
+`CASE_LAW_PHRASES` (`lib/discovery/discovery.ts`) — court/ruling/precedent
+terms — instead of the legislative phrase set. No judicial (Supreme/
+Cassation/Public Prosecution) source exists among the official sources;
+those sites sit behind the same WAFs documented in
+`docs/source-provisioning-2026-08-02.md`, so discovery is the proven path
+here too. Feeds "آخر القضايا" in the UI via `category = 'litigation'` — no
+schema change. The classify prompt (`n8n/prompts/classify-legal-update.md`)
+carries the quality bar: rejects generic crime/accident/celebrity/tabloid
+content that merely mentions a court in passing, accepts only content with
+genuine legal/professional value.
 
 ## Status model
 
@@ -49,26 +56,59 @@ activation outright.
 ### Flags
 
 - `exclusion_group` — suspected mirrors share a label; a partial unique index
-  permits at most one **active** member. Set on the two Bahrain LLOC candidates.
+  permits at most one **active** member.
 - `requires_authority_check` — non-government domain, must be confirmed as the
-  genuine authority. Set on `adgm.com`, `qfcra.com`, `cma.org.sa`,
-  `qfma.org.qa`, `gso.org.sa`.
+  genuine authority. Applies to any remaining `.com`/`.org` authority domain
+  (e.g. `qfcra.com`, `qfma.org.qa`) — confirm before trusting, since the
+  domain itself gives no assurance.
 
-Domain corroboration done in M3 was **registry validation only** — it confirms
-an authority's identity, never that a parser works or that the site is
-reachable. Only M7.5 establishes the latter.
+Domain corroboration done at seed time was **registry validation only** — it
+confirms an authority's identity, never that a parser works or that the site
+is reachable. Only a real production-egress test establishes that (see
+[`docs/EGRESS_VERIFICATION.md`](../docs/EGRESS_VERIFICATION.md)).
 
 ---
 
-## Why nothing is configured yet
+## Current live registry
+
+**16 official sources** (14 active, 2 pending) **+ 12 discovery
+pseudo-sources = 28 total.** Read live, not maintained by hand — re-run the
+query below (via the production Supabase credential; no direct DB access
+from this file) before trusting exact numbers, since admin edits and future
+activations diverge from any static snapshot immediately.
+
+| Country | Active | Pending | Notes |
+|---|---|---|---|
+| SA | 7 | 0 | 1 removed for a confirmed blocker (`gac.gov.sa`, `blocked_by_access`, kept — see below) |
+| AE | 0 | 0 | all 10 original seed sources removed — no working official source found for any of them, including UAE CMA (real POST API exists but no provable request body; the plain HTML listing has no recoverable publication date) |
+| KW | 2 | 1 | Kuwait Al-Youm kept `requires_subscription` — needs a Legal Department decision, not a technical fix |
+| QA | 2 | 0 | |
+| BH | 1 | 0 | both gazette mirrors (`legalaffairs.gov.bh`, `lloc.gov.bh`) removed — persistent block / broken domain on re-check |
+| OM | 1 | 0 | Financial Services Authority (`fsa.gov.om`/`e.fsa.gov.om`) activated 2026-08-11 — POST JSON API, live-tested end-to-end via an isolated, since-deleted test workflow |
+| GCC | 1 | 0 | GSO (`gso.org.sa`) active; GCC Secretariat General removed (no feed found) |
+
+One SA source is kept `blocked_by_access` rather than removed:
+**الهيئة العامة للمنافسة (`gac.gov.sa`)** returned an explicit HTTP 503
+maintenance page at last audit — a transient condition, not a structural
+block, and worth a simple recheck later rather than removal.
+
+---
+
+## Original 52-source seed
+
+The tables below are the **as-designed seed**, preserved for history. They
+no longer reflect which sources are actually configured or active — see
+[Current live registry](#current-live-registry) above for that. Rows for
+sources removed on 2026-08-11 are marked `[removed]`.
+
+### Why nothing was configured at seed time
 
 M3 required: *"Do not guess selectors or parser configuration. If a parser
 cannot yet be safely defined, mark the source as pending configuration rather
 than inventing selectors."*
 
-Selectors cannot be authored without loading each site and reading its markup.
-Verification was attempted and **could not be completed** from the build
-environment:
+Selectors could not be authored without loading each site and reading its
+markup, and verification could not be completed from the build environment:
 
 | Attempt | Result |
 |---|---|
@@ -76,27 +116,25 @@ environment:
 | Fetch tool against `zatca.gov.sa`, `moj.gov.sa`, `sama.gov.sa`, `cma.org.sa`, `uaelegislation.gov.ae`, `almeezan.qa` | **`403 Forbidden` from the sites themselves** — GCC government portals sit behind WAFs that reject datacentre IPs |
 | Web search for official domains | **Succeeded** — domains below are corroborated |
 
-So the registry records what could be established (authority, domain,
-classification, cadence) and leaves blank what could not (parser type,
+So the seed recorded what could be established (authority, domain,
+classification, cadence) and left blank what could not (parser type,
 selectors, feed URLs). Guessing would have produced a registry that looks
 finished, silently scrapes the wrong elements, and fills the archive with
-plausible nonsense attributed to a real ministry.
-
-**The WAF finding matters for M8.** n8n will hit the same blocks unless it runs
-from an egress address these sites accept. Establish that before configuring
-parsers — it may require a fixed IP, an allow-list request, or an on-premises
-runner.
+plausible nonsense attributed to a real ministry. The 2026-08-11 finalization
+resolved this the intended way: a real production-egress audit per source
+(`docs/EGRESS_VERIFICATION.md`), configuring what proved reachable and
+removing what did not, rather than ever inventing a selector.
 
 ---
 
-## What is trustworthy in the seed
+## What was trustworthy in the seed
 
 | Field | Status |
 |---|---|
 | `country`, `authority_ar`, `authority_en` | Reliable |
 | `source_type`, `priority`, `poll_interval_minutes` | Reliable — deliberate classification |
-| `base_url`, `allowed_domains` | Corroborated by search; **re-confirm in a browser at activation** |
-| `parser_type`, `parser_config`, `feed_url` | **Deliberately empty.** Must be filled by a human |
+| `base_url`, `allowed_domains` | Corroborated by search; re-confirmed in a browser at activation |
+| `parser_type`, `parser_config`, `feed_url` | Deliberately empty at seed time — filled per source during activation |
 
 ---
 
@@ -114,10 +152,15 @@ appear in `allowed_domains`).
 - **RSS/Atom** — look for `<link rel="alternate" type="application/rss+xml">`,
   or try `/rss`, `/feed`, `/ar/rss.xml`. Best case: stable and cheap.
 - **JSON API** — open devtools, reload the listing, look for an XHR returning
-  JSON. Common on modern portals. Record the endpoint and field paths.
+  JSON. Common on modern portals. Record the endpoint and field paths; if it
+  requires `POST` with a JSON body, `parser_config.http_method`/`http_body`
+  support it (`Fetch API` node, config-driven, GET/POST allow-listed).
 - **HTML listing** — fall back to CSS selectors against the listing page.
   Prefer semantic classes over generated ones; a selector like `.css-1x7f9k`
-  will break on the next deploy.
+  will break on the next deploy. Confirm the listing actually carries a
+  reliable, per-item publication date — a source with no recoverable date
+  cannot pass the Publishing Gate's `no_publication_date` rule no matter how
+  good the selectors are.
 - **PDF index** — the page is a list of PDF links, typical of gazettes.
 
 **3. Fill in the configuration.**
@@ -144,13 +187,29 @@ update public.sources
        config_status = 'verified', updated_at = now()
  where country = 'SA' and authority_en = '<authority>';
 
--- JSON API
+-- JSON API (GET)
 update public.sources
    set parser_type = 'api',
        feed_url = 'https://example.gov.sa/api/v1/announcements',
        parser_config = '{
          "items_path":"data.results", "title":"title", "url":"link",
          "date":"published_at", "body":"summary", "headers":{}
+       }'::jsonb,
+       config_status = 'verified', updated_at = now()
+ where country = 'SA' and authority_en = '<authority>';
+
+-- JSON API (POST + body, and/or a URL built from more than one field —
+-- see Oman FSA for a real example: url is {template, fields} where a field
+-- can itself be {from, map} to translate a numeric/enum code)
+update public.sources
+   set parser_type = 'api',
+       feed_url = 'https://example.gov.sa/api/v1/search',
+       parser_config = '{
+         "http_method": "POST",
+         "http_body": {"page": 1},
+         "items_path": "data",
+         "title": "HeaderAr", "date": "IssueDate",
+         "url": {"template": "https://example.gov.sa/files/{id}", "fields": {"id": "Id"}}
        }'::jsonb,
        config_status = 'verified', updated_at = now()
  where country = 'SA' and authority_en = '<authority>';
@@ -184,139 +243,136 @@ appears there.
 
 ---
 
-## Contents
+## Seed contents (original 52 — see [Current live registry](#current-live-registry) for what's actually configured today)
 
 52 sources · 6 official gazettes · 25 regulators · 19 government bodies ·
-2 GCC-wide. Zero news sources — none have been approved yet, and the platform
-trusts nothing that is not in this table.
+2 GCC-wide, as originally designed.
 
-### Saudi Arabia (13)
+### Saudi Arabia (13, 8 remain)
 
-| Authority | Domain | Type | P |
-|---|---|---|---|
-| أم القرى — الجريدة الرسمية | `uqn.gov.sa` | gazette | 1 |
-| هيئة الخبراء بمجلس الوزراء | `laws.boe.gov.sa` | government | 1 |
-| هيئة الزكاة والضريبة والجمارك (ZATCA) | `zatca.gov.sa` | regulator | 1 |
-| البنك المركزي السعودي (SAMA) | `sama.gov.sa` | regulator | 1 |
-| هيئة السوق المالية (CMA) | `cma.org.sa` | regulator | 1 |
-| وزارة العدل | `moj.gov.sa` | government | 2 |
-| وزارة التجارة | `mc.gov.sa` | government | 2 |
-| وزارة الموارد البشرية والتنمية الاجتماعية | `hrsd.gov.sa` | government | 2 |
-| الهيئة العامة للمنافسة | `gac.gov.sa` | regulator | 2 |
-| الهيئة السعودية للبيانات والذكاء الاصطناعي (SDAIA) | `sdaia.gov.sa` | regulator | 2 |
-| الهيئة الوطنية للأمن السيبراني (NCA) | `nca.gov.sa` | regulator | 2 |
-| الهيئة السعودية للملكية الفكرية (SAIP) | `saip.gov.sa` | regulator | 3 |
-| المركز الوطني للتنافسية | `ncc.gov.sa` | government | 3 |
+| Authority | Domain | Type | P | Status |
+|---|---|---|---|---|
+| أم القرى — الجريدة الرسمية | `uqn.gov.sa` | gazette | 1 | active |
+| هيئة الخبراء بمجلس الوزراء | `laws.boe.gov.sa` | government | 1 | `[removed]` |
+| هيئة الزكاة والضريبة والجمارك (ZATCA) | `zatca.gov.sa` | regulator | 1 | active |
+| البنك المركزي السعودي (SAMA) | `sama.gov.sa` | regulator | 1 | active |
+| هيئة السوق المالية (CMA) | `cma.gov.sa` | regulator | 1 | active |
+| وزارة العدل | `moj.gov.sa` | government | 2 | `[removed]` |
+| وزارة التجارة | `mc.gov.sa` | government | 2 | `[removed]` |
+| وزارة الموارد البشرية والتنمية الاجتماعية | `hrsd.gov.sa` | government | 2 | active |
+| الهيئة العامة للمنافسة | `gac.gov.sa` | regulator | 2 | kept, `blocked_by_access` (transient 503) |
+| الهيئة السعودية للبيانات والذكاء الاصطناعي (SDAIA) | `sdaia.gov.sa` | regulator | 2 | `[removed]` |
+| الهيئة الوطنية للأمن السيبراني (NCA) | `nca.gov.sa` | regulator | 2 | active |
+| الهيئة السعودية للملكية الفكرية (SAIP) | `saip.gov.sa` | regulator | 3 | active |
+| المركز الوطني للتنافسية | `ncc.gov.sa` | government | 3 | `[removed]` |
 
-### United Arab Emirates (10)
+### United Arab Emirates (10, 0 remain)
 
-| Authority | Domain | Type | P |
-|---|---|---|---|
-| منصة التشريعات | `uaelegislation.gov.ae` | gazette | 1 |
-| هيئة الأوراق المالية والسلع (SCA) | `sca.gov.ae` | regulator | 1 |
-| مصرف الإمارات المركزي | `centralbank.ae` | regulator | 1 |
-| الهيئة الاتحادية للضرائب | `tax.gov.ae` | regulator | 1 |
-| وزارة العدل | `moj.gov.ae` | government | 2 |
-| وزارة الاقتصاد | `moec.gov.ae` | government | 2 |
-| مجلس الوزراء | `uaecabinet.ae` | government | 2 |
-| سلطة دبي للخدمات المالية (DFSA) | `dfsa.ae` | regulator | 2 |
-| سوق أبوظبي العالمي (ADGM) | `adgm.com` | regulator | 2 |
-| مجلس الأمن السيبراني | `csc.gov.ae` | government | 3 |
+| Authority | Domain | Type | P | Status |
+|---|---|---|---|---|
+| منصة التشريعات | `uaelegislation.gov.ae` | gazette | 1 | `[removed]` — Cloudflare JS challenge |
+| هيئة الأوراق المالية والسلع (SCA → CMA) | `uaecma.gov.ae` | regulator | 1 | `[removed]` — real POST API found, no provable request body; HTML listing has no recoverable date |
+| مصرف الإمارات المركزي | `centralbank.ae` | regulator | 1 | `[removed]` — Cloudflare JS challenge |
+| الهيئة الاتحادية للضرائب | `tax.gov.ae` | regulator | 1 | `[removed]` — no feed found |
+| وزارة العدل | `moj.gov.ae` | government | 2 | `[removed]` — no feed found |
+| وزارة الاقتصاد | `moec.gov.ae` | government | 2 | `[removed]` — persistent timeout |
+| مجلس الوزراء | `uaecabinet.ae` | government | 2 | `[removed]` — Cloudflare JS challenge |
+| سلطة دبي للخدمات المالية (DFSA) | `dfsa.ae` | regulator | 2 | `[removed]` — Cloudflare JS challenge |
+| سوق أبوظبي العالمي (ADGM) | `adgm.com` | regulator | 2 | `[removed]` — no feed found |
+| مجلس الأمن السيبراني | `csc.gov.ae` | government | 3 | `[removed]` — TLS-level network block |
 
-### Kuwait (8)
+### Kuwait (8, 3 remain)
 
-| Authority | Domain | Type | P |
-|---|---|---|---|
-| الكويت اليوم — الجريدة الرسمية | `e.gov.kw` | gazette | 1 |
-| هيئة أسواق المال | `cma.gov.kw` | regulator | 1 |
-| بنك الكويت المركزي | `cbk.gov.kw` | regulator | 1 |
-| وزارة العدل | `moj.gov.kw` | government | 2 |
-| الأمانة العامة لمجلس الوزراء | `cmgs.gov.kw` | government | 2 |
-| وزارة التجارة والصناعة | `moci.gov.kw` | government | 2 |
-| مجلس الأمة | `kna.kw` | government | 3 |
-| الهيئة العامة للقوى العاملة | `manpower.gov.kw` | regulator | 3 |
+| Authority | Domain | Type | P | Status |
+|---|---|---|---|---|
+| الكويت اليوم — الجريدة الرسمية | `e.gov.kw` | gazette | 1 | kept, `requires_subscription` |
+| هيئة أسواق المال | `cma.gov.kw` | regulator | 1 | active |
+| بنك الكويت المركزي | `cbk.gov.kw` | regulator | 1 | `[removed]` — persistent timeout |
+| وزارة العدل | `moj.gov.kw` | government | 2 | active |
+| الأمانة العامة لمجلس الوزراء | `cmgs.gov.kw` | government | 2 | `[removed]` — no feed found at corrected domain |
+| وزارة التجارة والصناعة | `moci.gov.kw` | government | 2 | `[removed]` — no feed found |
+| مجلس الأمة | `kna.kw` | government | 3 | `[removed]` — no feed found |
+| الهيئة العامة للقوى العاملة | `manpower.gov.kw` | regulator | 3 | `[removed]` — persistent timeout |
 
-### Qatar (7)
+### Qatar (7, 2 remain)
 
-| Authority | Domain | Type | P |
-|---|---|---|---|
-| الميزان — البوابة القانونية | `almeezan.qa` | gazette | 1 |
-| مصرف قطر المركزي | `qcb.gov.qa` | regulator | 1 |
-| هيئة قطر للأسواق المالية (QFMA) | `qfma.org.qa` | regulator | 1 |
-| وزارة العدل | `moj.gov.qa` | government | 2 |
-| الأمانة العامة لمجلس الوزراء | `gco.gov.qa` | government | 2 |
-| هيئة تنظيم مركز قطر للمال (QFCRA) | `qfcra.com` | regulator | 2 |
-| الهيئة العامة للضرائب | `gta.gov.qa` | regulator | 2 |
+| Authority | Domain | Type | P | Status |
+|---|---|---|---|---|
+| الميزان — البوابة القانونية | `almeezan.qa` | gazette | 1 | `[removed]` — legacy ASP.NET site, no findable feed within a bounded VIEWSTATE-heavy page |
+| مصرف قطر المركزي | `qcb.gov.qa` | regulator | 1 | `[removed]` — no feed found |
+| هيئة قطر للأسواق المالية (QFMA) | `qfma.org.qa` | regulator | 1 | active |
+| وزارة العدل | `moj.gov.qa` | government | 2 | `[removed]` — no feed found |
+| الأمانة العامة لمجلس الوزراء | `gco.gov.qa` | government | 2 | `[removed]` — Cloudflare JS challenge |
+| هيئة تنظيم مركز قطر للمال (QFCRA) | `qfcra.com` | regulator | 2 | active |
+| الهيئة العامة للضرائب | `gta.gov.qa` | regulator | 2 | `[removed]` — no feed found |
 
-### Oman (6)
+### Oman (6, 1 remains)
 
-| Authority | Domain | Type | P |
-|---|---|---|---|
-| وزارة العدل والشؤون القانونية — الجريدة الرسمية | `mjla.gov.om` | gazette | 1 |
-| البنك المركزي العماني | `cbo.gov.om` | regulator | 1 |
-| الهيئة العامة لسوق المال | `fsa.gov.om` | regulator | 1 |
-| جهاز الضرائب | `taxoman.gov.om` | regulator | 2 |
-| وزارة العمل | `mol.gov.om` | government | 3 |
-| وزارة التجارة والصناعة وترويج الاستثمار | `moci.gov.om` | government | 3 |
+| Authority | Domain | Type | P | Status |
+|---|---|---|---|---|
+| وزارة العدل والشؤون القانونية — الجريدة الرسمية | `mjla.gov.om` | gazette | 1 | `[removed]` — no feed found |
+| البنك المركزي العماني | `cbo.gov.om` | regulator | 1 | `[removed]` — no feed found |
+| الهيئة العامة لسوق المال → هيئة الخدمات المالية (FSA) | `fsa.gov.om` / `e.fsa.gov.om` | regulator | 1 | active — **activated 2026-08-11** |
+| جهاز الضرائب | `taxoman.gov.om` | regulator | 2 | `[removed]` — 404 on base_url, no correct domain found |
+| وزارة العمل | `mol.gov.om` | government | 3 | `[removed]` — no feed found |
+| وزارة التجارة والصناعة وترويج الاستثمار | `moci.gov.om` | government | 3 | `[removed]` — DNS resolution failure |
 
-### Bahrain (6)
+### Bahrain (6, 1 remains)
 
-| Authority | Domain | Type | P |
-|---|---|---|---|
-| هيئة التشريع والرأي القانوني — الجريدة الرسمية | `legalaffairs.gov.bh` | gazette | 1 |
-| بوابة التشريعات (LLOC) | `lloc.gov.bh` | government | 1 |
-| مصرف البحرين المركزي | `cbb.gov.bh` | regulator | 1 |
-| وزارة العدل والشؤون الإسلامية والأوقاف | `moj.gov.bh` | government | 2 |
-| الجهاز الوطني للإيرادات (NBR) | `nbr.gov.bh` | regulator | 2 |
-| هيئة تنظيم سوق العمل (LMRA) | `lmra.gov.bh` | regulator | 3 |
+| Authority | Domain | Type | P | Status |
+|---|---|---|---|---|
+| هيئة التشريع والرأي القانوني — الجريدة الرسمية | `legalaffairs.gov.bh` | gazette | 1 | `[removed]` — persistent HTTP 403 |
+| بوابة التشريعات (LLOC) | `lloc.gov.bh` | government | 1 | `[removed]` — broken/unreachable on re-check |
+| مصرف البحرين المركزي | `cbb.gov.bh` | regulator | 1 | `[removed]` — persistent HTTP 403 |
+| وزارة العدل والشؤون الإسلامية والأوقاف | `moj.gov.bh` | government | 2 | active |
+| الجهاز الوطني للإيرادات (NBR) | `nbr.gov.bh` | regulator | 2 | `[removed]` — persistent HTTP 403 |
+| هيئة تنظيم سوق العمل (LMRA) | `lmra.gov.bh` | regulator | 3 | `[removed]` — no feed found |
 
-### GCC-wide (2)
+### GCC-wide (2, 1 remains)
 
-| Authority | Domain | Type | P |
-|---|---|---|---|
-| الأمانة العامة لمجلس التعاون | `gcc-sg.org` | gcc | 3 |
-| هيئة التقييس لدول مجلس التعاون (GSO) | `gso.org.sa` | gcc | 4 |
+| Authority | Domain | Type | P | Status |
+|---|---|---|---|---|
+| الأمانة العامة لمجلس التعاون | `gcc-sg.org` | gcc | 3 | `[removed]` — no feed found |
+| هيئة التقييس لدول مجلس التعاون (GSO) | `gso.org.sa` | gcc | 4 | active |
 
 ---
 
-## Things to resolve at activation
+## Resolved / no longer applicable
 
-Recorded in each source's `notes` column so they surface in the admin panel.
-
-**Kuwait Al-Youm is `requires_subscription`.** The gazette is distributed
-by paid electronic subscription and a Ministry of Information mobile app; the
-`e.gov.kw` entry is the subscription service, not a readable index. An
-ingestion route must be agreed with the Legal Department — it may need a
-subscribed account. This is the one source that may not be automatable at all,
-and it is Kuwait's authoritative gazette, so it deserves an early decision.
-
-**Bahrain may be listed twice.** `legalaffairs.gov.bh` and `lloc.gov.bh` are
-both operated by the Legislation and Legal Opinion Commission. If one mirrors
-the other, monitoring both will double-ingest the same instrument under two
-`content_hash` values — the hash includes the URL, so deduplication will not
-catch it. Decide which is canonical and deactivate the other.
-
-**Three authorities use commercial or non-government domains** — `adgm.com`,
-`qfcra.com`, `cma.org.sa`, `qfma.org.qa`, `gso.org.sa`. All are believed
-legitimate, but confirm each is the genuine authority site before trusting it,
-precisely because the domain gives no assurance.
-
-**Oman's FSA was renamed** from the Capital Market Authority. Confirm
-`fsa.gov.om` is current.
-
-**Umm Al-Qura polls every 12 hours,** not hourly, because it publishes weekly on
-Fridays. Kuwait Al-Youm is the same. Everything else inherits its priority tier.
+- ~~Kuwait Al-Youm is `requires_subscription`~~ — still true, still kept
+  pending a Legal Department decision on a paid subscription; see
+  [Current live registry](#current-live-registry).
+- ~~Bahrain may be listed twice~~ — resolved by removing both
+  `legalaffairs.gov.bh` and `lloc.gov.bh`; Bahrain now has one official
+  source (`moj.gov.bh`).
+- ~~Oman's FSA was renamed~~ — confirmed: `fsa.gov.om` is current, and its
+  real content API lives on the `e.fsa.gov.om` subdomain (both are in
+  `allowed_domains`).
+- **Commercial/non-government domains still active:** `qfma.org.qa`,
+  `qfcra.com`, `gso.org.sa`. All corroborated as the genuine authority;
+  `adgm.com` and the old `cma.org.sa` entry were removed/superseded.
+- **Umm Al-Qura polls every 12 hours,** not hourly, because it publishes
+  weekly on Fridays. Kuwait Al-Youm is the same. Everything else inherits
+  its priority tier.
+- **UAE now has zero official sources.** All 10 original candidates were
+  removed — nine for a persistent access block or no discoverable feed, and
+  UAE CMA (the one with a real, working POST JSON API) for having no
+  recoverable per-item publication date anywhere in its reachable content.
+  This is a known gap, not an oversight — flagged here for whoever revisits
+  UAE sourcing next.
 
 ---
 
 ## Validation
 
-`03_source_registry_checks.sql`, run by `run_local_checks.sh`, covers the seven
-required checks plus the M3 safety guarantee:
+`03_source_registry_checks.sql`, run by `run_local_checks.sh`, validates the
+**seed/migration**, not live runtime state — S17 explicitly re-seeds and
+checks that admin edits (including today's activations and removals) are
+preserved rather than overwritten:
 
 | Check | Asserts |
 |---|---|
-| S1–S2 | all 7 jurisdictions covered; 52 sources |
+| S1–S2 | all 7 jurisdictions covered; 52 sources **in the seed** |
 | S3 | no duplicate `base_url` or `feed_url` |
 | S4 | one entry per authority per country |
 | S5 | shared domains reported; identical domain sets rejected |
@@ -330,4 +386,4 @@ required checks plus the M3 safety guarantee:
 | S14 | the configure → verify → activate lifecycle works and each gate holds |
 | S15 | no workflow logic leaked into `parser_config` |
 | S16 | gazettes are on fast tiers; zero unapproved news sources |
-| S17 | re-seeding adds nothing and preserves admin edits |
+| S17 | re-seeding adds nothing and preserves admin edits — this is *why* the 2026-08-11 removals/activation are safe: they live in the database, not the seed, and re-running the seed will not undo them |
