@@ -3,12 +3,12 @@
 import { useActionState } from 'react'
 
 import { ActionMessage, Field, inputClass, SubmitButton } from '@/components/admin/form-parts'
-import { Badge } from '@/components/badges'
 import { CONTROL_COMPACT } from '@/components/ui'
 import { IDLE } from '@/lib/actions/state'
 import { createUserProfile, setUserActive, setUserRole } from '@/lib/admin/actions'
 import type { UserRow } from '@/lib/admin/queries'
 import { USER_ROLE_LABELS_AR } from '@/lib/constants/taxonomy'
+import { cn } from '@/lib/utils'
 
 export function CreateUserForm() {
   const [state, action] = useActionState(createUserProfile, IDLE)
@@ -51,18 +51,28 @@ export function UserRow_({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
   const [activeState, activeAction] = useActionState(setUserActive, IDLE)
 
   return (
-    <li className="space-y-3 rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-4">
+    <li className="space-y-3 py-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <p className="text-sm font-medium text-(--color-ink)">
             {user.full_name ?? user.email}
             {isSelf ? <span className="ms-2 text-xs text-(--color-ink-subtle)">(أنت)</span> : null}
+            <span className="mx-2 text-(--color-border-strong)">·</span>
+            <span className="text-xs font-normal text-(--color-ink-subtle)">
+              {USER_ROLE_LABELS_AR[user.role]}
+            </span>
           </p>
           <p className="font-mono text-xs text-(--color-ink-subtle)" dir="ltr">
             {user.email}
           </p>
         </div>
-        <Badge tone={user.active ? 'ok' : 'neutral'}>{user.active ? 'مفعّل' : 'موقوف'}</Badge>
+        <span className="inline-flex items-center gap-1.5 text-sm text-(--color-ink-muted)">
+          <span
+            aria-hidden="true"
+            className={cn('size-1.5 rounded-full', user.active ? 'bg-(--color-ok)' : 'bg-(--color-ink-subtle)')}
+          />
+          {user.active ? 'مفعّل' : 'موقوف'}
+        </span>
       </div>
 
       <div className="flex flex-wrap items-end gap-4">

@@ -10,6 +10,22 @@ for the discovery layer, and `n8n/README.md` §6 for how the two interact.
 `source_type` below — it classifies HOW a source is reached, not WHAT kind
 of authority it is.
 
+**Case-law discovery (6 more, migration `0026`).** One more discovery
+pseudo-source per GCC country (never GCC itself — a case is attributed to the
+country it happened in), parallel to and fully independent of the six
+legal-update discovery feeds above: same `discovery_engine`/`discovery`
+shape, but querying `CASE_LAW_PHRASES` (`lib/discovery/discovery.ts`) —
+court/ruling/precedent terms — instead of the legislative phrase set. No
+judicial (Supreme/Cassation/Public Prosecution) source exists yet among the
+52 official sources; those sites are expected to sit behind the same WAFs
+documented in `docs/source-provisioning-2026-08-02.md`, so discovery is the
+proven path here too. Feeds "آخر القضايا" in the UI via `category =
+'litigation'` — no schema change. The classify prompt (
+`n8n/prompts/classify-legal-update.md`) carries the quality bar: rejects
+generic crime/accident/celebrity/tabloid content that merely mentions a
+court in passing, accepts only content with genuine legal/professional
+value.
+
 **Every source ships inactive and unverified.** Nothing will be crawled until a
 person opens the site, works out how to read it, and switches it on — from the
 production egress. This page is how that is done; the connectivity record lives

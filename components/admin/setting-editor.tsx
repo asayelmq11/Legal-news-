@@ -38,10 +38,7 @@ export function SettingEditor({
   const id = `setting-${def.key}`
 
   return (
-    <form
-      action={action}
-      className="space-y-3 rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-5"
-    >
+    <form action={action} className="space-y-3">
       {/* The key is submitted, but it is re-validated against the registry
           server-side — a forged key is refused there, not trusted from here. */}
       <input type="hidden" name="key" value={def.key} />

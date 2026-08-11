@@ -1,16 +1,23 @@
 import { notFound } from 'next/navigation'
 
-import { Badge } from '@/components/badges'
 import { SourceControls } from '@/components/admin/source-controls'
 import { SourceForm } from '@/components/admin/source-form'
 import { BackLink } from '@/components/ui'
+import { Dot } from '@/components/updates/editorial-row'
 import { requireAdmin } from '@/lib/auth/session'
 import { getSource } from '@/lib/admin/queries'
 import { verificationBlockers } from '@/lib/admin/source-schema'
 import { COUNTRIES } from '@/lib/constants/countries'
 import { INGESTION_MODE_LABELS_AR } from '@/lib/constants/taxonomy'
 import { SOURCE_STATUS_META, deriveSourceStatus } from '@/lib/sources/status'
-import { formatDateAr } from '@/lib/utils'
+import { cn, formatDateAr } from '@/lib/utils'
+
+const STATUS_DOT_TONE: Record<'ok' | 'warn' | 'danger' | 'neutral', string> = {
+  ok: 'bg-(--color-ok)',
+  warn: 'bg-(--color-warn)',
+  danger: 'bg-(--color-danger)',
+  neutral: 'bg-(--color-ink-subtle)',
+}
 
 export const metadata = { title: 'تفاصيل المصدر' }
 
@@ -39,10 +46,14 @@ export default async function SourceDetailPage({
       </nav>
 
       <header className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="brand">{COUNTRIES[source.country].nameAr}</Badge>
-          <Badge tone={meta.tone}>{meta.labelAr}</Badge>
-        </div>
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-(--color-ink-muted)">
+          <span>{COUNTRIES[source.country].nameAr}</span>
+          <Dot />
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden="true" className={cn('size-1.5 rounded-full', STATUS_DOT_TONE[meta.tone])} />
+            {meta.labelAr}
+          </span>
+        </p>
         <h1 className="text-2xl font-bold text-(--color-ink)">{source.authority_ar}</h1>
         <p className="text-sm text-(--color-ink-muted)">{meta.descriptionAr}</p>
       </header>
@@ -82,20 +93,20 @@ export default async function SourceDetailPage({
         </div>
       ) : null}
 
-      <section className="rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-5">
-        <h2 className="mb-4 text-sm font-semibold text-(--color-ink)">التحقق والتفعيل</h2>
+      <section className="space-y-4 border-t border-(--color-border) pt-6">
+        <h2 className="text-sm font-semibold text-(--color-ink)">التحقق والتفعيل</h2>
         <SourceControls source={source} />
       </section>
 
       {source.notes ? (
-        <section className="rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-5">
-          <h2 className="mb-2 text-sm font-semibold text-(--color-ink)">ملاحظات</h2>
+        <section className="space-y-2 border-t border-(--color-border) pt-6">
+          <h2 className="text-sm font-semibold text-(--color-ink)">ملاحظات</h2>
           <p className="whitespace-pre-wrap text-sm text-(--color-ink-muted)">{source.notes}</p>
         </section>
       ) : null}
 
-      <section className="rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-5">
-        <h2 className="mb-4 text-sm font-semibold text-(--color-ink)">آخر تشغيل</h2>
+      <section className="space-y-4 border-t border-(--color-border) pt-6">
+        <h2 className="text-sm font-semibold text-(--color-ink)">آخر تشغيل</h2>
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           <Row label="آخر نجاح" value={formatDateAr(source.last_success_at)} />
           <Row label="آخر إخفاق" value={formatDateAr(source.last_failure_at)} />
@@ -107,8 +118,8 @@ export default async function SourceDetailPage({
         ) : null}
       </section>
 
-      <section className="rounded-(--radius-card) border border-(--color-border) bg-(--color-surface-raised) p-5">
-        <h2 className="mb-4 text-sm font-semibold text-(--color-ink)">
+      <section className="space-y-4 border-t border-(--color-border) pt-6">
+        <h2 className="text-sm font-semibold text-(--color-ink)">
           آلية الوصول <span className="font-normal text-(--color-ink-subtle)">(الاكتشاف الهجين)</span>
         </h2>
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
@@ -127,7 +138,7 @@ export default async function SourceDetailPage({
         ) : null}
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-4 border-t border-(--color-border) pt-6">
         <h2 className="text-sm font-semibold text-(--color-ink)">تعديل المصدر</h2>
         <SourceForm source={source} />
       </section>

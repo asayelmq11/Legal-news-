@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildCaseLawFeedUrl,
   buildGoogleNewsFeedUrl,
+  CASE_LAW_PHRASES,
   DISCOVERY_LEGAL_PHRASES,
   extractCanonicalUrl,
   hostnameOf,
@@ -138,6 +140,48 @@ describe('buildGoogleNewsFeedUrl', () => {
 
   it('produces a distinct URL per country (no accidental base_url collision)', () => {
     const urls = new Set(['SA', 'AE', 'KW', 'QA', 'BH', 'OM'].map((c) => buildGoogleNewsFeedUrl(c as never)))
+    expect(urls.size).toBe(6)
+  })
+
+  it("builds the Oman query from 'سلطنة عمان', never the bare, Amman-ambiguous 'عمان' alone", () => {
+    const decoded = decodeURIComponent(buildGoogleNewsFeedUrl('OM'))
+    expect(decoded).toContain('سلطنة عمان')
+  })
+})
+
+describe('buildCaseLawFeedUrl', () => {
+  it('builds a well-formed Google News RSS search URL per country', () => {
+    const url = buildCaseLawFeedUrl('SA')
+    expect(url).toContain('https://news.google.com/rss/search?q=')
+    expect(url).toContain('gl=SA')
+    expect(url).toContain('ceid=SA:ar')
+    expect(url).toContain('hl=ar')
+  })
+
+  it('encodes every configured case-law phrase into the query', () => {
+    const url = buildCaseLawFeedUrl('AE')
+    const decoded = decodeURIComponent(url)
+    for (const phrase of CASE_LAW_PHRASES) {
+      expect(decoded).toContain(phrase)
+    }
+  })
+
+  it('uses a different phrase set than the legislative feed (independently tunable)', () => {
+    const caseUrl = decodeURIComponent(buildCaseLawFeedUrl('SA'))
+    const legalUrl = decodeURIComponent(buildGoogleNewsFeedUrl('SA'))
+    expect(caseUrl).not.toBe(legalUrl)
+    for (const phrase of DISCOVERY_LEGAL_PHRASES) {
+      expect(caseUrl).not.toContain(phrase)
+    }
+  })
+
+  it("builds the Oman case-law query from 'سلطنة عمان' too, not the bare 'عمان'", () => {
+    const decoded = decodeURIComponent(buildCaseLawFeedUrl('OM'))
+    expect(decoded).toContain('سلطنة عمان')
+  })
+
+  it('produces a distinct URL per country', () => {
+    const urls = new Set(['SA', 'AE', 'KW', 'QA', 'BH', 'OM'].map((c) => buildCaseLawFeedUrl(c as never)))
     expect(urls.size).toBe(6)
   })
 })

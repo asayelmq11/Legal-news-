@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { CONTENT_TYPE_KEYS } from '@/lib/constants/content-type'
 import { COUNTRY_CODES } from '@/lib/constants/countries'
 import { LEGAL_CATEGORIES } from '@/lib/constants/taxonomy'
 
@@ -63,6 +64,7 @@ const searchParamsSchema = z.object({
     }),
   country: multiEnum(COUNTRY_CODES),
   category: multiEnum(LEGAL_CATEGORIES),
+  contentType: multiEnum(CONTENT_TYPE_KEYS),
   source: z
     .string()
     .optional()
@@ -113,6 +115,7 @@ export function parseArchiveFilters(raw: RawSearchParams): ArchiveFilters {
     // list-valued: every entry is kept
     country: raw.country,
     category: raw.category,
+    contentType: raw.contentType,
     // scalar: a repeated parameter collapses to its first value
     source: first(raw.source),
     publishedFrom: first(raw.publishedFrom),
@@ -146,6 +149,7 @@ export function hasActiveFilters(f: ArchiveFilters): boolean {
     f.q !== '' ||
     f.country.length > 0 ||
     f.category.length > 0 ||
+    f.contentType.length > 0 ||
     f.source !== undefined ||
     f.publishedFrom !== undefined ||
     f.publishedTo !== undefined
@@ -167,6 +171,7 @@ export function buildArchiveQuery(
   if (f.q) params.set('q', f.q)
   for (const c of f.country) params.append('country', c)
   for (const c of f.category) params.append('category', c)
+  for (const c of f.contentType) params.append('contentType', c)
   if (f.source) params.set('source', f.source)
   if (f.publishedFrom) params.set('publishedFrom', f.publishedFrom)
   if (f.publishedTo) params.set('publishedTo', f.publishedTo)

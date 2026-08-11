@@ -1,20 +1,21 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import {
-  Badge,
-  CategoryBadge,
-  CountryBadge,
-  DocumentTypeBadge,
-  LegalStatusBadge,
-} from '@/components/badges'
+import { Badge } from '@/components/badges'
 import { ExternalLinkIcon } from '@/components/icons'
 import { BackLink, BUTTON } from '@/components/ui'
+import { Dot } from '@/components/updates/editorial-row'
+import { COUNTRIES } from '@/lib/constants/countries'
 import { requireActiveUser } from '@/lib/auth/session'
 import { getArchiveItem } from '@/lib/queries/updates'
 import { LINK_REJECTION_LABELS_AR, verifySourceLink } from '@/lib/updates/links'
 import { formatDateAr } from '@/lib/utils'
-import { SOURCE_TYPE_LABELS_AR } from '@/lib/constants/taxonomy'
+import {
+  DOCUMENT_TYPE_LABELS_AR,
+  LEGAL_CATEGORY_LABELS_AR,
+  LEGAL_STATUS_LABELS_AR,
+  SOURCE_TYPE_LABELS_AR,
+} from '@/lib/constants/taxonomy'
 
 /**
  * Read-only detail view.
@@ -48,12 +49,23 @@ export default async function UpdateDetailPage({
       </nav>
 
       <header className="space-y-4">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <CountryBadge country={item.country} />
-          <CategoryBadge category={item.category} />
-          <DocumentTypeBadge documentType={item.document_type} />
-          <LegalStatusBadge status={item.legal_status} />
-        </div>
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-(--color-ink-muted)">
+          <span>{COUNTRIES[item.country].nameAr}</span>
+          <Dot />
+          <span>{LEGAL_CATEGORY_LABELS_AR[item.category]}</span>
+          {item.document_type ? (
+            <>
+              <Dot />
+              <span>{DOCUMENT_TYPE_LABELS_AR[item.document_type]}</span>
+            </>
+          ) : null}
+          {item.legal_status ? (
+            <>
+              <Dot />
+              <span>{LEGAL_STATUS_LABELS_AR[item.legal_status]}</span>
+            </>
+          ) : null}
+        </p>
 
         <h1 className="text-2xl leading-relaxed font-bold text-(--color-ink) sm:text-[1.6rem]">
           {item.title_ar}
@@ -87,20 +99,23 @@ export default async function UpdateDetailPage({
         </p>
       </section>
 
-      <section className="space-y-3 rounded-(--radius-lg) border border-(--color-border) bg-(--color-surface-raised) p-5 sm:p-6">
+      <section className="space-y-3 border-t border-(--color-border) pt-6">
         <h2 className="text-xs font-semibold tracking-wide text-(--color-ink-subtle)">المصدر الرسمي</h2>
 
         <div className="space-y-1">
           <p className="text-sm font-medium text-(--color-ink)">
             {item.sources?.authority_ar ?? 'جهة غير معروفة'}
+            {item.sources ? (
+              <>
+                <span className="mx-2 text-(--color-border-strong)">·</span>
+                <span className="text-(--color-ink-subtle)">{SOURCE_TYPE_LABELS_AR[item.sources.source_type]}</span>
+              </>
+            ) : null}
           </p>
           {item.sources ? (
             <p className="text-xs text-(--color-ink-subtle)" dir="ltr">
               {item.sources.authority_en}
             </p>
-          ) : null}
-          {item.sources ? (
-            <Badge>{SOURCE_TYPE_LABELS_AR[item.sources.source_type]}</Badge>
           ) : null}
         </div>
 

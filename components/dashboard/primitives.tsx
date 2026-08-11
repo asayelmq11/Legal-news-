@@ -26,26 +26,28 @@ export function DistributionList({
 
   return (
     <div className="space-y-4">
-      <ol className="space-y-3">
-        {shown.map((item, i) => {
+      <ol className="space-y-4">
+        {shown.map((item) => {
           const share = total > 0 ? Math.round((item.count / total) * 100) : 0
           return (
             <li key={item.label} className="space-y-1.5">
               <div className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="flex min-w-0 items-baseline gap-2">
-                  <span className="shrink-0 text-xs font-medium tabular-nums text-(--color-ink-subtle)">
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  <span className="truncate font-medium text-(--color-ink)">{item.label}</span>
-                </span>
-                <span className="flex shrink-0 items-baseline gap-1.5 tabular-nums">
+                <span className="truncate font-medium text-(--color-ink)">{item.label}</span>
+                <span className="flex shrink-0 items-baseline gap-2 tabular-nums">
                   <span className="font-semibold text-(--color-ink)">{item.count}</span>
                   <span className="text-xs text-(--color-ink-subtle)">{share}٪</span>
                 </span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-(--color-surface-sunken)" role="presentation">
+              {/* A real pill track (not a hairline) with a rounded fill anchored to
+                  the baseline — the dataviz skill's mark spec for a ranked bar,
+                  applied here purely as styling: the underlying share/rank math
+                  above is unchanged. */}
+              <div
+                className="h-1.5 overflow-hidden rounded-full bg-(--color-surface-sunken)"
+                role="presentation"
+              >
                 <div
-                  className="h-full rounded-full bg-(--color-brand)"
+                  className="h-full rounded-full bg-(--color-brand) transition-[inline-size] duration-300 ease-out"
                   style={{ inlineSize: `${Math.round((item.count / max) * 100)}%` }}
                 />
               </div>

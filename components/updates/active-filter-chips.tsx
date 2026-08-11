@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { XIcon } from '@/components/icons'
+import { CONTENT_TYPE_LABELS_AR } from '@/lib/constants/content-type'
 import { COUNTRIES } from '@/lib/constants/countries'
 import { LEGAL_CATEGORY_LABELS_AR } from '@/lib/constants/taxonomy'
 import { listFilterSources } from '@/lib/queries/updates'
@@ -46,6 +47,18 @@ export async function ActiveFilterChips({ filters }: { filters: ArchiveFilters }
       href: `/updates${buildArchiveQuery({
         ...filters,
         category: filters.category.filter((x) => x !== c),
+        page: 1,
+      })}`,
+    })
+  }
+
+  for (const c of filters.contentType) {
+    chips.push({
+      key: `contentType-${c}`,
+      label: CONTENT_TYPE_LABELS_AR[c],
+      href: `/updates${buildArchiveQuery({
+        ...filters,
+        contentType: filters.contentType.filter((x) => x !== c),
         page: 1,
       })}`,
     })

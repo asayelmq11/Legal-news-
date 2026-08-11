@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { contentTypeOrExpr } from '@/lib/constants/content-type'
 import { createClient } from '@/lib/supabase/server'
 import {
   escapeLikePattern,
@@ -101,11 +102,17 @@ function applyFilters<T extends {
   eq: (col: string, val: string) => T
   gte: (col: string, val: string | number) => T
   lte: (col: string, val: string | number) => T
+  or: (filters: string) => T
 }>(query: T, f: ArchiveFilters): T {
   let q = query
 
   if (f.country.length) q = q.in('country', f.country)
   if (f.category.length) q = q.in('category', f.category)
+  // "نوع المحتوى" — a UI-facing grouping over document_type/legal_status, not
+  // a stored column. Each selected bucket becomes a PostgREST OR fragment
+  // (contentTypeOrExpr); multiple buckets are joined into one `.or()` group,
+  // AND-ed with every other filter on this query exactly like `.in()` would be.
+  if (f.contentType.length) q = q.or(f.contentType.map(contentTypeOrExpr).join(','))
   if (f.source) q = q.eq('source_id', f.source)
 
   if (f.publishedFrom) q = q.gte('publication_date', f.publishedFrom)

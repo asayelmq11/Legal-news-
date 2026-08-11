@@ -32,16 +32,16 @@ export default async function UsersPage() {
         </p>
       ) : null}
 
-      <section className="rounded-(--radius-lg) border border-(--color-border) bg-(--color-surface-raised) p-5 sm:p-6">
-        <h2 className="mb-4 text-sm font-semibold text-(--color-ink)">إضافة ملف مستخدم</h2>
+      <section className="space-y-4 border-t border-(--color-border) pt-6">
+        <h2 className="text-sm font-semibold text-(--color-ink)">إضافة ملف مستخدم</h2>
         <CreateUserForm />
       </section>
 
-      <section className="space-y-3">
+      <section className="space-y-1 border-t border-(--color-border) pt-6">
         <h2 className="text-sm font-semibold text-(--color-ink)">
           المستخدمون المُسجَّلون ({rows.length})
         </h2>
-        <ul className="space-y-3">
+        <ul className="divide-y divide-(--color-border)">
           {rows.map((u) => (
             <UserRow_ key={u.id} user={u} isSelf={u.id === admin.id} />
           ))}

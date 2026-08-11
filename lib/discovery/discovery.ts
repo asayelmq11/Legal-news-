@@ -177,6 +177,13 @@ const COUNTRY_NAMES_AR: Record<GccCountryCode, string> = {
   OM: 'سلطنة عمان',
 }
 
+function buildFeedUrl(country: GccCountryCode, phrases: readonly string[], when: string): string {
+  const clause = phrases.map((p) => `"${p}"`).join(' OR ')
+  const q = `(${clause}) ${COUNTRY_NAMES_AR[country]} when:${when}`
+  const query = encodeURIComponent(q)
+  return `https://news.google.com/rss/search?q=${query}&hl=ar&gl=${country}&ceid=${country}:ar`
+}
+
 /**
  * Builds a Google News RSS search URL scoped to a GCC country. `when` is the
  * freshness window Google News understands (e.g. '2d', '1d') — kept short
@@ -184,10 +191,38 @@ const COUNTRY_NAMES_AR: Record<GccCountryCode, string> = {
  * fuzzy-duplicate checks downstream, not this window, for correctness.
  */
 export function buildGoogleNewsFeedUrl(country: GccCountryCode, when = '2d'): string {
-  const clause = DISCOVERY_LEGAL_PHRASES.map((p) => `"${p}"`).join(' OR ')
-  const q = `(${clause}) ${COUNTRY_NAMES_AR[country]} when:${when}`
-  const query = encodeURIComponent(q)
-  return `https://news.google.com/rss/search?q=${query}&hl=ar&gl=${country}&ceid=${country}:ar`
+  return buildFeedUrl(country, DISCOVERY_LEGAL_PHRASES, when)
+}
+
+/**
+ * The case-law-specific phrases the "آخر القضايا" discovery query looks for —
+ * deliberately about *rulings and precedents themselves*, not "قضية" alone
+ * (too generic — would pull in crime/celebrity tabloid coverage that merely
+ * mentions a court case in passing). Precision here still isn't perfect —
+ * same tradeoff as DISCOVERY_LEGAL_PHRASES — the AI classification stage is
+ * where genuine legal value is separated from noise, not this query.
+ */
+export const CASE_LAW_PHRASES = [
+  'حكم قضائي',
+  'حكم المحكمة',
+  'محكمة النقض',
+  'محكمة التمييز',
+  'محكمة الاستئناف',
+  'المحكمة العليا',
+  'سابقة قضائية',
+  'النيابة العامة',
+] as const
+
+/**
+ * Builds a Google News RSS search URL scoped to a GCC country's court/case
+ * news, parallel to `buildGoogleNewsFeedUrl` but with `CASE_LAW_PHRASES`
+ * instead of the legislative `DISCOVERY_LEGAL_PHRASES` — a separate feed per
+ * country rather than merging the two phrase sets into one query, so each
+ * can be tuned and monitored independently without risking the
+ * already-validated legal-update feeds.
+ */
+export function buildCaseLawFeedUrl(country: GccCountryCode, when = '2d'): string {
+  return buildFeedUrl(country, CASE_LAW_PHRASES, when)
 }
 
 /** One item as it appears in a Google News RSS response, before resolution. */

@@ -2,9 +2,12 @@ import { Suspense } from 'react'
 
 import { ActiveFilterChips } from '@/components/updates/active-filter-chips'
 import { ArchiveFilterPanel } from '@/components/updates/archive-filters'
+import { EditorialRow, EditorialRowList } from '@/components/updates/editorial-row'
 import { ArchivePagination } from '@/components/updates/pagination'
-import { UpdateCard } from '@/components/updates/update-card'
 import { requireActiveUser } from '@/lib/auth/session'
+import { contentTypeLabel } from '@/lib/constants/content-type'
+import { COUNTRIES } from '@/lib/constants/countries'
+import { LEGAL_CATEGORY_LABELS_AR } from '@/lib/constants/taxonomy'
 import {
   groupByPublicationDate,
   listArchive,
@@ -38,27 +41,22 @@ export default async function UpdatesPage({
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[300px_1fr] xl:grid-cols-[340px_1fr]">
-        <aside className="lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100dvh-5.5rem)] lg:self-start lg:overflow-y-auto">
-          <Suspense fallback={<FilterSkeleton />}>
-            <FilterPanel />
-          </Suspense>
-        </aside>
+      <Suspense fallback={<FilterSkeleton />}>
+        <FilterPanel />
+      </Suspense>
 
-        <section className="space-y-4">
-          <Suspense fallback={null}>
-            <ActiveFilterChips filters={filters} />
-          </Suspense>
-          {/*
-            Keyed on the serialised filters so changing any of them remounts the
-            boundary and the skeleton is shown again, rather than the previous
-            result set sitting there looking current while the new query runs.
-          */}
-          <Suspense key={JSON.stringify(filters)} fallback={<ResultsSkeleton />}>
-            <Results filters={filters} isAdmin={isAdmin} />
-          </Suspense>
-        </section>
-      </div>
+      <Suspense fallback={null}>
+        <ActiveFilterChips filters={filters} />
+      </Suspense>
+
+      {/*
+        Keyed on the serialised filters so changing any of them remounts the
+        boundary and the skeleton is shown again, rather than the previous
+        result set sitting there looking current while the new query runs.
+      */}
+      <Suspense key={JSON.stringify(filters)} fallback={<ResultsSkeleton />}>
+        <Results filters={filters} isAdmin={isAdmin} />
+      </Suspense>
     </div>
   )
 }
@@ -121,17 +119,31 @@ async function Results({
           this page. Ordering and pagination stay in Postgres. */}
       <ol className="space-y-8">
         {groups.map((group) => (
-          <li key={group.date} className="space-y-3">
-            <h2 className="sticky top-14 z-10 -mx-1 bg-(--color-surface)/95 px-1 py-1 text-sm font-semibold text-(--color-ink-muted) backdrop-blur">
-              <time dateTime={group.date}>{formatDateAr(group.date)}</time>
+          <li key={group.date} className="space-y-1">
+            <h2 className="sticky top-14 z-10 flex items-baseline justify-between gap-3 bg-(--color-surface)/95 py-2 backdrop-blur">
+              <time dateTime={group.date} className="text-sm font-semibold text-(--color-ink)">
+                {formatDateAr(group.date)}
+              </time>
+              <span className="text-xs text-(--color-ink-subtle)">
+                {group.items.length} {group.items.length === 1 ? 'تحديث' : 'تحديثات'}
+              </span>
             </h2>
-            <ul className="divide-y divide-(--color-border)">
+            <EditorialRowList>
               {group.items.map((item) => (
-                <li key={item.id}>
-                  <UpdateCard item={item} />
-                </li>
+                <EditorialRow
+                  key={item.id}
+                  href={`/updates/${item.id}`}
+                  metaSegments={[
+                    contentTypeLabel(item),
+                    LEGAL_CATEGORY_LABELS_AR[item.category],
+                    COUNTRIES[item.country].nameAr,
+                  ]}
+                  title={item.title_ar}
+                  summary={item.summary_ar}
+                  sourceLabel={item.sources?.authority_ar ?? '—'}
+                />
               ))}
-            </ul>
+            </EditorialRowList>
           </li>
         ))}
       </ol>
@@ -174,10 +186,14 @@ function EmptyState({ filtered, query }: { filtered: boolean; query: string }) {
 
 function FilterSkeleton() {
   return (
-    <div
-      aria-hidden
-      className="h-[36rem] animate-pulse rounded-(--radius-lg) border border-(--color-border) bg-(--color-surface-sunken)"
-    />
+    <div className="space-y-3" aria-hidden>
+      <div className="h-11 animate-pulse rounded-(--radius-control) bg-(--color-surface-sunken)" />
+      <div className="flex gap-2">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-10 w-28 animate-pulse rounded-(--radius-control) bg-(--color-surface-sunken)" />
+        ))}
+      </div>
+    </div>
   )
 }
 

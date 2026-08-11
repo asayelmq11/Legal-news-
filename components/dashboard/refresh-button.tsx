@@ -96,17 +96,20 @@ export function RefreshButton({ initialStatus }: { initialStatus: RefreshStatus 
   const busy = running || isPending
 
   return (
-    <div className="flex flex-col items-end gap-2">
+    <div className="flex flex-col items-end gap-1.5">
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={handleClick} disabled={busy} className={BUTTON.primary}>
+        <p className="flex items-center gap-1.5 text-xs text-(--color-ink-subtle)">
+          <ClockIcon className="size-3.5" />
+          آخر تحديث ناجح: {lastSuccessfulRefreshAt ? formatDateTimeAr(lastSuccessfulRefreshAt) : 'لا يوجد بعد'}
+        </p>
+        {/* Ghost, not primary — the refresh control is a secondary action next to
+            the dashboard's actual data, not a headline element competing with the
+            KPI strip's own solid tile just below it. */}
+        <button type="button" onClick={handleClick} disabled={busy} className={BUTTON.ghost}>
           <RefreshIcon className={cn('size-4', busy && 'animate-spin')} />
           {busy ? 'جارٍ تحديث المستجدات…' : 'تحديث المستجدات'}
         </button>
       </div>
-      <p className="flex items-center gap-1.5 text-xs text-(--color-ink-subtle)">
-        <ClockIcon className="size-3.5" />
-        آخر تحديث ناجح: {lastSuccessfulRefreshAt ? formatDateTimeAr(lastSuccessfulRefreshAt) : 'لا يوجد بعد'}
-      </p>
       {message ? (
         <p
           role="status"
