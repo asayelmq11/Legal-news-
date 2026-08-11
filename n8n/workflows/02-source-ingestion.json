@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-09T11:30:07.437Z",
+  "updatedAt": "2026-08-10T21:53:15.459Z",
   "createdAt": "2026-08-01T16:46:39.922Z",
   "id": "FHt8uKbBcixIWbWO",
   "name": "02 — Source Ingestion",
@@ -24,6 +24,8 @@
               "conditions": {
                 "options": {
                   "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
                   "version": 2
                 },
                 "conditions": [
@@ -33,7 +35,8 @@
                     "operator": {
                       "type": "string",
                       "operation": "equals"
-                    }
+                    },
+                    "id": "8e2a42e2-ccee-4a39-b716-98787ff1b8b3"
                   }
                 ],
                 "combinator": "and"
@@ -43,6 +46,8 @@
               "conditions": {
                 "options": {
                   "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
                   "version": 2
                 },
                 "conditions": [
@@ -52,7 +57,8 @@
                     "operator": {
                       "type": "string",
                       "operation": "equals"
-                    }
+                    },
+                    "id": "17bc14f2-ffa1-46b5-87ff-5d5e1a4a8189"
                   }
                 ],
                 "combinator": "and"
@@ -62,6 +68,8 @@
               "conditions": {
                 "options": {
                   "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
                   "version": 2
                 },
                 "conditions": [
@@ -71,7 +79,8 @@
                     "operator": {
                       "type": "string",
                       "operation": "equals"
-                    }
+                    },
+                    "id": "5a688798-053b-4a1c-9943-4f7703f52cba"
                   }
                 ],
                 "combinator": "and"
@@ -81,6 +90,8 @@
               "conditions": {
                 "options": {
                   "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
                   "version": 2
                 },
                 "conditions": [
@@ -90,7 +101,8 @@
                     "operator": {
                       "type": "string",
                       "operation": "equals"
-                    }
+                    },
+                    "id": "7058d47a-fbd3-42e2-b2e1-bdddceb532b7"
                   }
                 ],
                 "combinator": "and"
@@ -152,7 +164,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// RSS lane → RawItem[]\n//\n// parser_config may name which fields carry the date and body; both default\n// to the RSS conventions. Nothing here is guessed at crawl time — an\n// unconfigured source never reaches this workflow, because it cannot be\n// activated.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst dateField = cfg.date_field || 'pubDate';\nconst contentField = cfg.content_field || 'description';\n\nconst root = $input.first().json;\nconst channel = root?.rss?.channel ?? root?.feed ?? {};\nlet entries = channel.item ?? channel.entry ?? root?.feed?.entry ?? [];\nif (!Array.isArray(entries)) entries = [entries];\n\nconst text = (v) => {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  if (typeof v === 'object') {\n    if (v._ !== undefined) return v._;\n    if (v['#text'] !== undefined) return v['#text'];\n    // Some feeds wrap the value in a nested element (e.g. <title><a>text</a></title>)\n    // instead of plain text or CDATA. Descend into the first nested value with content.\n    for (const key of Object.keys(v)) {\n      if (key === '$') continue;\n      const nested = text(v[key]);\n      if (nested) return nested;\n    }\n    return '';\n  }\n  return String(v);\n};\n\nconst toIsoDate = (v) => {\n  const raw = text(v);\n  if (!raw) return null;\n  const d = new Date(raw);\n  // An unparseable date becomes null. The AI is instructed never to invent\n  // one, and neither does this.\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nconst linkOf = (e) => {\n  if (typeof e.link === 'string') return e.link;\n  if (Array.isArray(e.link)) return e.link[0]?.$?.href ?? text(e.link[0]);\n  return e.link?.$?.href ?? text(e.link) ?? e.guid ? text(e.guid) : '';\n};\n\nreturn entries.filter(Boolean).map((e) => ({\n  json: {\n    source_id: src.id,\n    source_url: linkOf(e),\n    title_raw: text(e.title),\n    content_raw: text(e[contentField]) || text(e.summary) || text(e.content),\n    publication_date: toIsoDate(e[dateField] ?? e.published ?? e.updated),\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
+        "jsCode": "// RSS lane → RawItem[]\n//\n// parser_config may name which fields carry the date and body; both default\n// to the RSS conventions. Nothing here is guessed at crawl time — an\n// unconfigured source never reaches this workflow, because it cannot be\n// activated.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\nconst dateField = cfg.date_field || 'pubDate';\nconst contentField = cfg.content_field || 'description';\n\nconst root = $input.first().json;\nconst channel = root?.rss?.channel ?? root?.feed ?? {};\nlet entries = channel.item ?? channel.entry ?? root?.feed?.entry ?? [];\nif (!Array.isArray(entries)) entries = [entries];\n\nconst text = (v) => {\n  if (v === null || v === undefined) return '';\n  if (typeof v === 'string') return v;\n  if (typeof v === 'object') {\n    if (v._ !== undefined) return v._;\n    if (v['#text'] !== undefined) return v['#text'];\n    // Some feeds wrap the value in a nested element (e.g. <title><a>text</a></title>)\n    // instead of plain text or CDATA. Descend into the first nested value with content.\n    for (const key of Object.keys(v)) {\n      if (key === '$') continue;\n      const nested = text(v[key]);\n      if (nested) return nested;\n    }\n    return '';\n  }\n  return String(v);\n};\n\n// ── parseDateSafe ──────────────────────────────────────────────────────\n// Deterministic replacement for new Date(raw). new Date() silently\n// misreads ambiguous day-first dates (e.g. \"05/08/2026\", meant 5 August,\n// becomes 8 May under its US-style MM/DD heuristic) and cannot parse\n// Arabic month names or Hijri dates at all — confirmed empirically during\n// the 2026-08-10 source-verification pass across every candidate source.\n// Every source this platform crawls is an Arabic/Gulf official site, so\n// when a numeric date's day/month order is ambiguous (both values <= 12)\n// this function always assumes DAY-FIRST (DD/MM/YYYY) — a fixed rule, not\n// a per-string guess. Hijri dates are recognised (by month name or a\n// \"هـ\"/\"هجري\" marker) but never converted: no Hijri→Gregorian algorithm in\n// this project is verified against the real Umm al-Qura calendar these\n// sites use, and an approximate conversion could be silently off by a\n// day — exactly the failure mode this function exists to prevent.\n// Anything it cannot resolve with certainty returns null; the caller\n// never invents a date, and legal_updates.publication_date is NOT NULL,\n// so null here always means \"the Publishing Gate skips this item\", never\n// a bad insert.\nfunction parseDateSafe(raw) {\n  if (raw === null || raw === undefined) return null;\n  const EASTERN_DIGITS = '٠١٢٣٤٥٦٧٨٩';\n  let text = String(raw).trim().replace(/[٠-٩]/g, (ch) => String(EASTERN_DIGITS.indexOf(ch)));\n  if (!text) return null;\n\n  const pad = (n) => String(n).padStart(2, '0');\n  const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();\n  const isValid = (y, m, d) => m >= 1 && m <= 12 && d >= 1 && d <= daysInMonth(y, m);\n  const iso = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;\n\n  const HIJRI_MONTHS = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الآخرة', 'جمادى الثاني', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];\n  const hasHijriSignal = (s) => HIJRI_MONTHS.some((m) => s.includes(m)) || /هـ|هجري|\\bAH\\b/i.test(s);\n\n  // Dual-calendar strings (\"16/04/2026 الموافق 28/10/1447 هجري\") pair a real\n  // Gregorian date with its Hijri equivalent via the connector \"الموافق\"\n  // (\"corresponding to\") — confirmed on Al-Meezan (Qatar), both on its law\n  // detail page's issuance date and publication date fields. When a Hijri\n  // signal appears strictly after that connector, only the text before it is\n  // eligible for Gregorian parsing below, so the real date is not thrown\n  // away by the Hijri guard. A bare Hijri date with no such connector (e.g.\n  // \"10 أغسطس 1448 هـ\", where \"أغسطس\" is a coincidental look-alike, not a\n  // second calendar) never contains \"الموافق\" and is untouched — still\n  // resolves to null via the guard exactly as before.\n  const connectorIdx = text.indexOf('الموافق');\n  if (connectorIdx !== -1 && hasHijriSignal(text.slice(connectorIdx))) {\n    text = text.slice(0, connectorIdx);\n  }\n\n  // 1) ISO date or datetime — YYYY-MM-DD, optionally with a time part.\n  const isoMatch = text.match(/\\b(\\d{4})-(\\d{2})-(\\d{2})(?:[T ][\\d:.,+Zz-]*)?/);\n  if (isoMatch) {\n    const y = Number(isoMatch[1]), m = Number(isoMatch[2]), d = Number(isoMatch[3]);\n    return isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  // 2) Hijri guard — recognised, never converted (see header comment).\n  if (hasHijriSignal(text)) return null;\n\n  // 3) Arabic Gregorian month names — \"10 أغسطس 2026\" / \"05-أغسطس-2026\".\n  const AR_MONTHS = { 'يناير': 1, 'فبراير': 2, 'مارس': 3, 'أبريل': 4, 'إبريل': 4, 'مايو': 5, 'يونيو': 6, 'يوليو': 7, 'أغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'نوفمبر': 11, 'ديسمبر': 12 };\n  const arMonthNames = Object.keys(AR_MONTHS).sort((a, b) => b.length - a.length).join('|');\n  const arMatch = text.match(new RegExp(`(\\\\d{1,2})\\\\s*[-\\\\s]\\\\s*(${arMonthNames})\\\\s*[-\\\\s]\\\\s*(\\\\d{4})`));\n  if (arMatch) {\n    const d = Number(arMatch[1]), m = AR_MONTHS[arMatch[2]], y = Number(arMatch[3]);\n    return isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  // 4) English month names — \"August 5, 2026\" / \"5 August 2026\" /\n  // \"05 Aug 2026\" / RFC-822 (\"Wed, 05 Aug 2026 10:00:00 GMT\").\n  const EN_MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };\n  const enMonthNames = 'january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec';\n  const dayFirst = text.match(new RegExp(`\\\\b(\\\\d{1,2})\\\\s+(${enMonthNames})\\\\.?,?\\\\s+(\\\\d{4})\\\\b`, 'i'));\n  const monthFirst = !dayFirst && text.match(new RegExp(`\\\\b(${enMonthNames})\\\\.?\\\\s+(\\\\d{1,2}),?\\\\s+(\\\\d{4})\\\\b`, 'i'));\n  if (dayFirst || monthFirst) {\n    const d = Number(dayFirst ? dayFirst[1] : monthFirst[2]);\n    const monthWord = (dayFirst ? dayFirst[2] : monthFirst[1]).toLowerCase();\n    const m = EN_MONTHS[monthWord.slice(0, 3)];\n    const y = Number(dayFirst ? dayFirst[3] : monthFirst[3]);\n    return m && isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  // 5) Numeric day-first — DD/MM/YYYY, DD-MM-YYYY, or DD.MM.YYYY (the dot\n  // form is real: SAIP's media-center listing uses \"09.07.2026\"). First\n  // number is always the day, second is always the month (see header\n  // comment) — never inferred from magnitude, so \"08/10/2026\" is always 8\n  // Oct, not a guess, and label text before the numbers (e.g. \"القرارات\n  // 10/08/2026\") does not block the match.\n  const numMatch = text.match(/\\b(\\d{1,2})[\\/\\-.](\\d{1,2})[\\/\\-.](\\d{4})\\b/);\n  if (numMatch) {\n    const d = Number(numMatch[1]), m = Number(numMatch[2]), y = Number(numMatch[3]);\n    return isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  return null;\n}\n\nconst toIsoDate = (v) => parseDateSafe(text(v));\n\nconst linkOf = (e) => {\n  if (typeof e.link === 'string') return e.link;\n  if (Array.isArray(e.link)) return e.link[0]?.$?.href ?? text(e.link[0]);\n  return e.link?.$?.href ?? text(e.link) ?? e.guid ? text(e.guid) : '';\n};\n\nreturn entries.filter(Boolean).map((e) => ({\n  json: {\n    source_id: src.id,\n    source_url: linkOf(e),\n    title_raw: text(e.title),\n    content_raw: text(e[contentField]) || text(e.summary) || text(e.content),\n    publication_date: toIsoDate(e[dateField] ?? e.published ?? e.updated),\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
       },
       "id": "40ab11fd-8caa-4050-a276-25af3ffbdbf9",
       "name": "RSS → RawItem",
@@ -165,10 +177,19 @@
     },
     {
       "parameters": {
+        "method": "={{ $json.source.parser_config.http_method === 'POST' ? 'POST' : 'GET' }}",
         "url": "={{ $json.source.feed_url }}",
         "sendHeaders": true,
         "specifyHeaders": "json",
         "jsonHeaders": "={{ JSON.stringify($json.source.parser_config.headers || {}) }}",
+        "sendBody": "={{ $json.source.parser_config.http_method === 'POST' && !!$json.source.parser_config.http_body }}",
+        "specifyBody": "json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify($json.source.parser_config.http_body || {}) }}",
         "options": {
           "allowUnauthorizedCerts": "={{ !!$json.source.parser_config.allow_insecure_tls }}",
           "timeout": 30000
@@ -189,7 +210,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// API lane → RawItem[]\n// Field paths come from parser_config, filled in by an admin who inspected\n// the real response. Nothing is inferred.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\n\nconst dig = (obj, path) =>\n  (path || '').split('.').filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);\n\nconst payload = $input.first().json;\nlet items = cfg.items_path ? dig(payload, cfg.items_path) : payload;\nif (!Array.isArray(items)) items = items ? [items] : [];\n\nconst toIsoDate = (raw) => {\n  if (!raw) return null;\n  const d = new Date(raw);\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nreturn items.map((it) => ({\n  json: {\n    source_id: src.id,\n    source_url: String(dig(it, cfg.url) ?? ''),\n    title_raw: String(dig(it, cfg.title) ?? ''),\n    content_raw: String(dig(it, cfg.body) ?? ''),\n    publication_date: toIsoDate(dig(it, cfg.date)),\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
+        "jsCode": "// API lane → RawItem[]\n// Field paths come from parser_config, filled in by an admin who inspected\n// the real response. Nothing is inferred.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\n\nconst dig = (obj, path) =>\n  (path || '').split('.').filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);\n\n// Mirrors the HTML lane's own absolute() helper: an API response's own URL\n// field is routinely site-relative (e.g. \"/English/Legislation/....pdf\"),\n// and a relative source_url fails Normalise RawItem's hostname check outright\n// (every item silently rejected as no_url), so this is not optional.\nconst baseUrl = String(src.base_url || '').replace(/\\/+$/, '');\nconst originMatch = baseUrl.match(/^(https?:\\/\\/[^/]+)/i);\nconst origin = originMatch ? originMatch[1] : baseUrl;\nconst absolute = (href) => {\n  const value = String(href || '').trim();\n  if (!value) return '';\n  if (/^https?:\\/\\//i.test(value)) return value;\n  if (value.startsWith('//')) return `https:${value}`;\n  if (value.startsWith('/')) return `${origin}${value}`;\n  return `${baseUrl}/${value.replace(/^\\/+/, '')}`;\n};\n\n// Resolves an item's canonical URL from parser_config.url. Historically the\n// API lane only accepted a single dot-path string here — one JSON field, or\n// a relative path resolved through absolute() above. Some listing APIs\n// expose no single field with the full item link at all: the real URL only\n// exists as more than one field combined (e.g. a category slug plus a\n// numeric id). To cover that without inventing anything per-authority, the\n// same config key also accepts an object form:\n//   { template: \"/regulations/{category}/{id}\",\n//     fields: { category: \"cat.slug\", id: \"id\" } }\n// Every {placeholder} in the template is filled from fields[placeholder] via\n// the same dig() used everywhere else, so nested paths work identically to\n// the plain-string form. If ANY referenced field is missing, this returns\n// '' rather than a half-built link — Normalise RawItem already rejects an\n// empty source_url as no_url, which is the correct outcome: a guessed or\n// partial URL that might 404 or resolve to the wrong item is worse than\n// dropping the item.\nfunction resolveUrl(urlCfg, it) {\n  if (urlCfg == null) return '';\n  if (typeof urlCfg === 'string') {\n    const v = dig(it, urlCfg);\n    return v == null ? '' : String(v);\n  }\n  if (typeof urlCfg === 'object' && typeof urlCfg.template === 'string') {\n    const fields = (urlCfg.fields && typeof urlCfg.fields === 'object') ? urlCfg.fields : {};\n    // A field spec is either a dot-path string (existing behaviour), or\n    // { from: <dot-path>, map: { \"<raw value>\": \"<url segment>\" } } — some\n    // APIs return a numeric/enum field (e.g. a content-type code) that the\n    // real URL needs as a specific string instead, and that translation has\n    // to be spelled out per source, never guessed at request time.\n    const resolveField = (spec) => {\n      if (spec == null) return undefined;\n      if (typeof spec === 'string') return dig(it, spec);\n      if (typeof spec === 'object' && typeof spec.from === 'string') {\n        const raw = dig(it, spec.from);\n        if (raw === null || raw === undefined) return undefined;\n        return spec.map && typeof spec.map === 'object' ? spec.map[String(raw)] : undefined;\n      }\n      return undefined;\n    };\n    const placeholders = urlCfg.template.match(/\\{(\\w+)\\}/g) || [];\n    for (const ph of placeholders) {\n      const key = ph.slice(1, -1);\n      const value = resolveField(fields[key]);\n      if (value === null || value === undefined || value === '') return '';\n    }\n    return urlCfg.template.replace(/\\{(\\w+)\\}/g, (_, key) => String(resolveField(fields[key])));\n  }\n  return '';\n}\n\nconst payload = $input.first().json;\nlet items = cfg.items_path ? dig(payload, cfg.items_path) : payload;\nif (!Array.isArray(items)) items = items ? [items] : [];\n\n// ── parseDateSafe ──────────────────────────────────────────────────────\n// Deterministic replacement for new Date(raw). new Date() silently\n// misreads ambiguous day-first dates (e.g. \"05/08/2026\", meant 5 August,\n// becomes 8 May under its US-style MM/DD heuristic) and cannot parse\n// Arabic month names or Hijri dates at all — confirmed empirically during\n// the 2026-08-10 source-verification pass across every candidate source.\n// Every source this platform crawls is an Arabic/Gulf official site, so\n// when a numeric date's day/month order is ambiguous (both values <= 12)\n// this function always assumes DAY-FIRST (DD/MM/YYYY) — a fixed rule, not\n// a per-string guess. Hijri dates are recognised (by month name or a\n// \"هـ\"/\"هجري\" marker) but never converted: no Hijri→Gregorian algorithm in\n// this project is verified against the real Umm al-Qura calendar these\n// sites use, and an approximate conversion could be silently off by a\n// day — exactly the failure mode this function exists to prevent.\n// Anything it cannot resolve with certainty returns null; the caller\n// never invents a date, and legal_updates.publication_date is NOT NULL,\n// so null here always means \"the Publishing Gate skips this item\", never\n// a bad insert.\nfunction parseDateSafe(raw) {\n  if (raw === null || raw === undefined) return null;\n  const EASTERN_DIGITS = '٠١٢٣٤٥٦٧٨٩';\n  let text = String(raw).trim().replace(/[٠-٩]/g, (ch) => String(EASTERN_DIGITS.indexOf(ch)));\n  if (!text) return null;\n\n  const pad = (n) => String(n).padStart(2, '0');\n  const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();\n  const isValid = (y, m, d) => m >= 1 && m <= 12 && d >= 1 && d <= daysInMonth(y, m);\n  const iso = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;\n\n  const HIJRI_MONTHS = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الآخرة', 'جمادى الثاني', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];\n  const hasHijriSignal = (s) => HIJRI_MONTHS.some((m) => s.includes(m)) || /هـ|هجري|\\bAH\\b/i.test(s);\n\n  // Dual-calendar strings (\"16/04/2026 الموافق 28/10/1447 هجري\") pair a real\n  // Gregorian date with its Hijri equivalent via the connector \"الموافق\"\n  // (\"corresponding to\") — confirmed on Al-Meezan (Qatar), both on its law\n  // detail page's issuance date and publication date fields. When a Hijri\n  // signal appears strictly after that connector, only the text before it is\n  // eligible for Gregorian parsing below, so the real date is not thrown\n  // away by the Hijri guard. A bare Hijri date with no such connector (e.g.\n  // \"10 أغسطس 1448 هـ\", where \"أغسطس\" is a coincidental look-alike, not a\n  // second calendar) never contains \"الموافق\" and is untouched — still\n  // resolves to null via the guard exactly as before.\n  const connectorIdx = text.indexOf('الموافق');\n  if (connectorIdx !== -1 && hasHijriSignal(text.slice(connectorIdx))) {\n    text = text.slice(0, connectorIdx);\n  }\n\n  // 1) ISO date or datetime — YYYY-MM-DD, optionally with a time part.\n  const isoMatch = text.match(/\\b(\\d{4})-(\\d{2})-(\\d{2})(?:[T ][\\d:.,+Zz-]*)?/);\n  if (isoMatch) {\n    const y = Number(isoMatch[1]), m = Number(isoMatch[2]), d = Number(isoMatch[3]);\n    return isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  // 2) Hijri guard — recognised, never converted (see header comment).\n  if (hasHijriSignal(text)) return null;\n\n  // 3) Arabic Gregorian month names — \"10 أغسطس 2026\" / \"05-أغسطس-2026\".\n  const AR_MONTHS = { 'يناير': 1, 'فبراير': 2, 'مارس': 3, 'أبريل': 4, 'إبريل': 4, 'مايو': 5, 'يونيو': 6, 'يوليو': 7, 'أغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'نوفمبر': 11, 'ديسمبر': 12 };\n  const arMonthNames = Object.keys(AR_MONTHS).sort((a, b) => b.length - a.length).join('|');\n  const arMatch = text.match(new RegExp(`(\\\\d{1,2})\\\\s*[-\\\\s]\\\\s*(${arMonthNames})\\\\s*[-\\\\s]\\\\s*(\\\\d{4})`));\n  if (arMatch) {\n    const d = Number(arMatch[1]), m = AR_MONTHS[arMatch[2]], y = Number(arMatch[3]);\n    return isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  // 4) English month names — \"August 5, 2026\" / \"5 August 2026\" /\n  // \"05 Aug 2026\" / RFC-822 (\"Wed, 05 Aug 2026 10:00:00 GMT\").\n  const EN_MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };\n  const enMonthNames = 'january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec';\n  const dayFirst = text.match(new RegExp(`\\\\b(\\\\d{1,2})\\\\s+(${enMonthNames})\\\\.?,?\\\\s+(\\\\d{4})\\\\b`, 'i'));\n  const monthFirst = !dayFirst && text.match(new RegExp(`\\\\b(${enMonthNames})\\\\.?\\\\s+(\\\\d{1,2}),?\\\\s+(\\\\d{4})\\\\b`, 'i'));\n  if (dayFirst || monthFirst) {\n    const d = Number(dayFirst ? dayFirst[1] : monthFirst[2]);\n    const monthWord = (dayFirst ? dayFirst[2] : monthFirst[1]).toLowerCase();\n    const m = EN_MONTHS[monthWord.slice(0, 3)];\n    const y = Number(dayFirst ? dayFirst[3] : monthFirst[3]);\n    return m && isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  // 5) Numeric day-first — DD/MM/YYYY, DD-MM-YYYY, or DD.MM.YYYY (the dot\n  // form is real: SAIP's media-center listing uses \"09.07.2026\"). First\n  // number is always the day, second is always the month (see header\n  // comment) — never inferred from magnitude, so \"08/10/2026\" is always 8\n  // Oct, not a guess, and label text before the numbers (e.g. \"القرارات\n  // 10/08/2026\") does not block the match.\n  const numMatch = text.match(/\\b(\\d{1,2})[\\/\\-.](\\d{1,2})[\\/\\-.](\\d{4})\\b/);\n  if (numMatch) {\n    const d = Number(numMatch[1]), m = Number(numMatch[2]), y = Number(numMatch[3]);\n    return isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  return null;\n}\n\nconst toIsoDate = (raw) => parseDateSafe(raw);\n\nreturn items.map((it) => ({\n  json: {\n    source_id: src.id,\n    source_url: absolute(resolveUrl(cfg.url, it)),\n    title_raw: String(dig(it, cfg.title) ?? ''),\n    content_raw: String(dig(it, cfg.body) ?? ''),\n    publication_date: toIsoDate(dig(it, cfg.date)),\n    attachments: [],\n    fetched_at: new Date().toISOString(),\n  },\n}));"
       },
       "id": "cc84dd24-e6a7-4725-b99d-4d75a19900ed",
       "name": "API → RawItem",
@@ -252,7 +273,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// HTML lane → RawItem[]\n//\n// Selectors come from parser_config, which an admin filled in against the\n// live page during verification. A source with an empty config cannot be\n// marked verified and therefore cannot be active, so this never runs on\n// guessed selectors.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\n\n// Extract origin without using the URL class,\n// because this n8n environment does not expose it inside Code nodes.\nconst baseUrl = String(src.base_url || '').replace(/\\/+$/, '');\nconst originMatch = baseUrl.match(/^(https?:\\/\\/[^/]+)/i);\nconst origin = originMatch ? originMatch[1] : baseUrl;\n\nconst blocks = $input.first().json.items || [];\n\n// Minimal extraction over the fragment HTML. Kept dependency-free: the\n// HTML node has already narrowed the document to the list items.\nconst pick = (html, selector) => {\n  if (!selector) return '';\n  const attrMatch = selector.match(/^(.*)@([\\w-]+)$/);\n  const sel = (attrMatch ? attrMatch[1] : selector).trim();\n  const attr = attrMatch ? attrMatch[2] : null;\n  const tag = sel.split(/[\\s>]/).pop().replace(/[.#].*$/, '') || 'a';\n  const re = new RegExp(`<${tag}[^>]*>([\\\\s\\\\S]*?)</${tag}>`, 'i');\n  if (attr) {\n    const attrRe = new RegExp(`<${tag}[^>]*\\\\s${attr}=[\"']([^\"']+)[\"']`, 'i');\n    const m = html.match(attrRe);\n    return m ? m[1] : '';\n  }\n  const m = html.match(re);\n  return m ? m[1].replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim() : '';\n};\n\nconst absolute = (href) => {\n  const value = String(href || '').trim();\n  if (!value) return '';\n  if (/^https?:\\/\\//i.test(value)) return value;\n  if (value.startsWith('//')) return `https:${value}`;\n  if (value.startsWith('/')) return `${origin}${value}`;\n  return `${baseUrl}/${value.replace(/^\\/+/, '')}`;\n};\n\nconst toIsoDate = (raw) => {\n  if (!raw) return null;\n  const d = new Date(raw);\n  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);\n};\n\nreturn blocks.map((html) => {\n  const link = absolute(pick(html, cfg.link));\n  const pdfMatch = html.match(/href=[\"']([^\"']+\\.pdf)[\"']/i);\n  return {\n    json: {\n      source_id: src.id,\n      source_url: link,\n      title_raw: pick(html, cfg.title),\n      content_raw: pick(html, cfg.body),\n      publication_date: toIsoDate(pick(html, cfg.date)),\n      // PDF enrichment applies to every lane, not just parser_type = pdf:\n      // gazettes routinely publish a listing entry whose substance is an\n      // attached document.\n      attachments: pdfMatch ? [absolute(pdfMatch[1])] : [],\n      fetched_at: new Date().toISOString(),\n    },\n  };\n});\n"
+        "jsCode": "// HTML lane → RawItem[]\n//\n// Selectors come from parser_config, which an admin filled in against the\n// live page during verification. A source with an empty config cannot be\n// marked verified and therefore cannot be active, so this never runs on\n// guessed selectors.\n\nconst src = $('Called by scheduler').first().json.source;\nconst cfg = src.parser_config || {};\n\n// Extract origin without using the URL class,\n// because this n8n environment does not expose it inside Code nodes.\nconst baseUrl = String(src.base_url || '').replace(/\\/+$/, '');\nconst originMatch = baseUrl.match(/^(https?:\\/\\/[^/]+)/i);\nconst origin = originMatch ? originMatch[1] : baseUrl;\n\n// Optional secondary split for a `list` match that has no per-item wrapper\n// at all — the repeating unit IS a bare tag (e.g. LMRA Bahrain: 10 sibling\n// <a class=\"list-group-item\" href=... title=...> elements with no shared\n// per-item parent). `list` still matches the one real shared ancestor (e.g.\n// the surrounding <div class=\"list-group\">); `list_item` (a bare tag name,\n// e.g. \"a\") then splits that single blob into each top-level <a>...</a>\n// fragment, keeping every fragment's OWN opening tag intact — unlike the\n// native listing extractor (which returns only a matched element's INNER\n// html), this preserves the row's own attributes (href, title, ...) so\n// pick(row, 'a@href') / pick(row, 'a@title') can read them directly off the\n// row itself. Only used when parser_config.list_item is set — every source\n// without it keeps exactly the current single-block-per-list-match shape.\nconst splitListItem = (html, tag) => {\n  const tokenRe = new RegExp(`<${tag}(?:\\\\s[^>]*)?>|</${tag}>`, 'gi');\n  const stack = [];\n  const results = [];\n  let m;\n  while ((m = tokenRe.exec(html))) {\n    const isOpen = m[0][0] === '<' && m[0][1] !== '/';\n    if (isOpen) {\n      stack.push(m.index);\n    } else {\n      const start = stack.pop();\n      if (start === undefined) continue;\n      if (stack.length === 0) results.push(html.slice(start, m.index + m[0].length));\n    }\n  }\n  return results;\n};\n\nconst rawBlocks = $input.first().json.items || [];\nconst blocks = cfg.list_item\n  ? rawBlocks.flatMap((block) => splitListItem(block, cfg.list_item))\n  : rawBlocks;\n\n// Minimal extraction over the fragment HTML. Kept dependency-free: the\n// HTML node has already narrowed the document to the list items.\nconst pick = (html, selector) => {\n  if (!selector) return '';\n\n  // Optional trailing occurrence index — \"span:2\" is the 2nd <span> found in\n  // the fragment (see below), 1 unless stated, never assumed. Always the\n  // outermost suffix, so it applies the same whether or not \"@attr\" is also\n  // present (\"a@href:2\" means the 2nd <a>'s href).\n  const idxMatch = selector.match(/^(.*):(\\d+)$/);\n  const withoutIdx = idxMatch ? idxMatch[1] : selector;\n  const occurrence = idxMatch ? Math.max(1, Number(idxMatch[2])) : 1;\n\n  const attrMatch = withoutIdx.match(/^(.*)@([\\w-]+)$/);\n  const sel = (attrMatch ? attrMatch[1] : withoutIdx).trim();\n  const attr = attrMatch ? attrMatch[2] : null;\n\n  // Optional \"tag#substring\" targets whichever <tag> has an id CONTAINING\n  // that substring — ASP.NET/WebForms pages routinely prefix a real id with\n  // a long, template-generated control path (e.g. \"ctl00_ctl32_..._ItemDate\"),\n  // so a substring match is the part that's actually stable page to page.\n  const idMatch = sel.match(/^([a-zA-Z][\\w-]*)#(.+)$/);\n  const tag = (idMatch ? idMatch[1] : sel.split(/[\\s>]/).pop().replace(/[.#].*$/, '')) || 'a';\n  const idSubstring = idMatch ? idMatch[2] : null;\n\n  const idOf = (attrs) => {\n    const m = attrs.match(/\\sid=[\"']([^\"']*)[\"']/i);\n    return m ? m[1] : '';\n  };\n\n  if (attr) {\n    // Attribute extraction only ever needs the *opening* tag, so this never\n    // requires a matching close — mirrors the old behaviour exactly (the\n    // first tag that actually carries this attribute) when no :N/#id is\n    // given, and extends it with the same occurrence/id targeting.\n    const openRe = new RegExp(`<${tag}(\\\\s[^>]*)?>`, 'gi');\n    let count = 0, m;\n    while ((m = openRe.exec(html))) {\n      const attrs = m[1] || '';\n      if (idSubstring && !idOf(attrs).includes(idSubstring)) continue;\n      if (!new RegExp(`\\\\s${attr}=[\"']`, 'i').test(attrs)) continue;\n      count++;\n      if (count === occurrence) {\n        const av = attrs.match(new RegExp(`\\\\s${attr}=[\"']([^\"']+)[\"']`, 'i'));\n        return av ? av[1] : '';\n      }\n    }\n    return '';\n  }\n\n  // Finds the Nth complete <tag>...</tag> pair, tracking a same-tag depth\n  // stack so a wrapper that itself contains other <tag> elements resolves to\n  // its OWN matching close, not the nearest one anywhere after it (the old\n  // single non-greedy regex effectively did the latter, which silently\n  // truncated content whenever the same tag nested inside itself — the SAIP\n  // media-center publish date, reached only through two other <div>\n  // wrappers, is a real case this fixes). Occurrences are numbered in the\n  // order each pair *closes*, so an innermost/leaf element — normally what a\n  // config is actually reaching for — gets a low number regardless of how\n  // deep it sits; a flat run of siblings with no nesting at all numbers\n  // exactly as simple top-to-bottom counting would expect (unchanged from\n  // the old behaviour for occurrence 1 with no nesting).\n  const tokenRe = new RegExp(`<${tag}(\\\\s[^>]*)?>|</${tag}>`, 'gi');\n  const stack = [];\n  let count = 0, m, found = null;\n  while ((m = tokenRe.exec(html))) {\n    const isOpen = m[0][0] === '<' && m[0][1] !== '/';\n    if (isOpen) {\n      stack.push({ start: m.index + m[0].length, attrs: m[1] || '' });\n    } else {\n      const frame = stack.pop();\n      if (!frame) continue;\n      if (idSubstring && !idOf(frame.attrs).includes(idSubstring)) continue;\n      count++;\n      if (count === occurrence) { found = { attrs: frame.attrs, inner: html.slice(frame.start, m.index) }; break; }\n    }\n  }\n  if (!found) return '';\n\n  if (tag === 'time') {\n    const dt = found.attrs.match(/\\sdatetime=[\"']([^\"']+)[\"']/i);\n    if (dt) return dt[1];\n  }\n\n  return found.inner.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n};\n\nconst absolute = (href) => {\n  const value = String(href || '').trim();\n  if (!value) return '';\n  if (/^https?:\\/\\//i.test(value)) return value;\n  if (value.startsWith('//')) return `https:${value}`;\n  if (value.startsWith('/')) return `${origin}${value}`;\n  return `${baseUrl}/${value.replace(/^\\/+/, '')}`;\n};\n\n// ── parseDateSafe ──────────────────────────────────────────────────────\n// Deterministic replacement for new Date(raw). new Date() silently\n// misreads ambiguous day-first dates (e.g. \"05/08/2026\", meant 5 August,\n// becomes 8 May under its US-style MM/DD heuristic) and cannot parse\n// Arabic month names or Hijri dates at all — confirmed empirically during\n// the 2026-08-10 source-verification pass across every candidate source.\n// Every source this platform crawls is an Arabic/Gulf official site, so\n// when a numeric date's day/month order is ambiguous (both values <= 12)\n// this function always assumes DAY-FIRST (DD/MM/YYYY) — a fixed rule, not\n// a per-string guess. Hijri dates are recognised (by month name or a\n// \"هـ\"/\"هجري\" marker) but never converted: no Hijri→Gregorian algorithm in\n// this project is verified against the real Umm al-Qura calendar these\n// sites use, and an approximate conversion could be silently off by a\n// day — exactly the failure mode this function exists to prevent.\n// Anything it cannot resolve with certainty returns null; the caller\n// never invents a date, and legal_updates.publication_date is NOT NULL,\n// so null here always means \"the Publishing Gate skips this item\", never\n// a bad insert.\nfunction parseDateSafe(raw) {\n  if (raw === null || raw === undefined) return null;\n  const EASTERN_DIGITS = '٠١٢٣٤٥٦٧٨٩';\n  let text = String(raw).trim().replace(/[٠-٩]/g, (ch) => String(EASTERN_DIGITS.indexOf(ch)));\n  if (!text) return null;\n\n  const pad = (n) => String(n).padStart(2, '0');\n  const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();\n  const isValid = (y, m, d) => m >= 1 && m <= 12 && d >= 1 && d <= daysInMonth(y, m);\n  const iso = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;\n\n  const HIJRI_MONTHS = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الآخرة', 'جمادى الثاني', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];\n  const hasHijriSignal = (s) => HIJRI_MONTHS.some((m) => s.includes(m)) || /هـ|هجري|\\bAH\\b/i.test(s);\n\n  // Dual-calendar strings (\"16/04/2026 الموافق 28/10/1447 هجري\") pair a real\n  // Gregorian date with its Hijri equivalent via the connector \"الموافق\"\n  // (\"corresponding to\") — confirmed on Al-Meezan (Qatar), both on its law\n  // detail page's issuance date and publication date fields. When a Hijri\n  // signal appears strictly after that connector, only the text before it is\n  // eligible for Gregorian parsing below, so the real date is not thrown\n  // away by the Hijri guard. A bare Hijri date with no such connector (e.g.\n  // \"10 أغسطس 1448 هـ\", where \"أغسطس\" is a coincidental look-alike, not a\n  // second calendar) never contains \"الموافق\" and is untouched — still\n  // resolves to null via the guard exactly as before.\n  const connectorIdx = text.indexOf('الموافق');\n  if (connectorIdx !== -1 && hasHijriSignal(text.slice(connectorIdx))) {\n    text = text.slice(0, connectorIdx);\n  }\n\n  // 1) ISO date or datetime — YYYY-MM-DD, optionally with a time part.\n  const isoMatch = text.match(/\\b(\\d{4})-(\\d{2})-(\\d{2})(?:[T ][\\d:.,+Zz-]*)?/);\n  if (isoMatch) {\n    const y = Number(isoMatch[1]), m = Number(isoMatch[2]), d = Number(isoMatch[3]);\n    return isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  // 2) Hijri guard — recognised, never converted (see header comment).\n  if (hasHijriSignal(text)) return null;\n\n  // 3) Arabic Gregorian month names — \"10 أغسطس 2026\" / \"05-أغسطس-2026\".\n  const AR_MONTHS = { 'يناير': 1, 'فبراير': 2, 'مارس': 3, 'أبريل': 4, 'إبريل': 4, 'مايو': 5, 'يونيو': 6, 'يوليو': 7, 'أغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'نوفمبر': 11, 'ديسمبر': 12 };\n  const arMonthNames = Object.keys(AR_MONTHS).sort((a, b) => b.length - a.length).join('|');\n  const arMatch = text.match(new RegExp(`(\\\\d{1,2})\\\\s*[-\\\\s]\\\\s*(${arMonthNames})\\\\s*[-\\\\s]\\\\s*(\\\\d{4})`));\n  if (arMatch) {\n    const d = Number(arMatch[1]), m = AR_MONTHS[arMatch[2]], y = Number(arMatch[3]);\n    return isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  // 4) English month names — \"August 5, 2026\" / \"5 August 2026\" /\n  // \"05 Aug 2026\" / RFC-822 (\"Wed, 05 Aug 2026 10:00:00 GMT\").\n  const EN_MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };\n  const enMonthNames = 'january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec';\n  const dayFirst = text.match(new RegExp(`\\\\b(\\\\d{1,2})\\\\s+(${enMonthNames})\\\\.?,?\\\\s+(\\\\d{4})\\\\b`, 'i'));\n  const monthFirst = !dayFirst && text.match(new RegExp(`\\\\b(${enMonthNames})\\\\.?\\\\s+(\\\\d{1,2}),?\\\\s+(\\\\d{4})\\\\b`, 'i'));\n  if (dayFirst || monthFirst) {\n    const d = Number(dayFirst ? dayFirst[1] : monthFirst[2]);\n    const monthWord = (dayFirst ? dayFirst[2] : monthFirst[1]).toLowerCase();\n    const m = EN_MONTHS[monthWord.slice(0, 3)];\n    const y = Number(dayFirst ? dayFirst[3] : monthFirst[3]);\n    return m && isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  // 5) Numeric day-first — DD/MM/YYYY, DD-MM-YYYY, or DD.MM.YYYY (the dot\n  // form is real: SAIP's media-center listing uses \"09.07.2026\"). First\n  // number is always the day, second is always the month (see header\n  // comment) — never inferred from magnitude, so \"08/10/2026\" is always 8\n  // Oct, not a guess, and label text before the numbers (e.g. \"القرارات\n  // 10/08/2026\") does not block the match.\n  const numMatch = text.match(/\\b(\\d{1,2})[\\/\\-.](\\d{1,2})[\\/\\-.](\\d{4})\\b/);\n  if (numMatch) {\n    const d = Number(numMatch[1]), m = Number(numMatch[2]), y = Number(numMatch[3]);\n    return isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  return null;\n}\n\nconst toIsoDate = (raw) => parseDateSafe(raw);\n\nreturn blocks.map((html) => {\n  const link = absolute(pick(html, cfg.link));\n  const pdfMatch = html.match(/href=[\"']([^\"']+\\.pdf)[\"']/i);\n  return {\n    json: {\n      source_id: src.id,\n      source_url: link,\n      title_raw: pick(html, cfg.title),\n      content_raw: pick(html, cfg.body),\n      publication_date: toIsoDate(pick(html, cfg.date)),\n      // PDF enrichment applies to every lane, not just parser_type = pdf:\n      // gazettes routinely publish a listing entry whose substance is an\n      // attached document.\n      attachments: pdfMatch ? [absolute(pdfMatch[1])] : [],\n      fetched_at: new Date().toISOString(),\n    },\n  };\n});\n"
       },
       "id": "66a54f22-2502-497c-94b1-ff5c01c7a351",
       "name": "HTML → RawItem",
@@ -354,20 +375,19 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ messages: [{ role: 'system', content: $json.system_prompt }, { role: 'user', content: `الجهة: ${$json.source.authority_ar}\\nالدولة المسجّلة للمصدر: ${$json.source.country}\\nالرابط: ${$json.source_url}\\nتاريخ النشر المستخرج من المصدر: ${$json.publication_date || 'غير متوفر'}\\n\\nالعنوان:\\n${$json.title_raw}\\n\\nالنص:\\n${$json.content_raw}` }], response_format: { type: 'json_object' } }) }}",
         "options": {
-          "timeout": 60000,
-          "response": {
-            "response": {
-              "responseFormat": "json",
-              "fullResponse": true,
-              "neverError": true
-            }
-          },
           "batching": {
             "batch": {
-              "batchSize": 4,
-              "batchInterval": 1000
+              "batchSize": 4
             }
-          }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 60000
         }
       },
       "id": "cd12041f-9490-447d-94b2-30c6ae7009fa",
@@ -378,16 +398,16 @@
         1184,
         304
       ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
       "credentials": {
         "httpHeaderAuth": {
           "id": "ugjJj94h0d6VTNr5",
           "name": "Azure OpenAI account — Legal Intelligence"
         }
       },
-      "onError": "continueRegularOutput",
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 5000
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -396,7 +416,7 @@
             {
               "id": "p1",
               "name": "system_prompt",
-              "value": "أنت مصنِّف آلي في منصة رصد قانوني داخلية لإدارة قانونية.\n\nمهمتك محدودة بدقة: تحديد ما إذا كان النص تحديثاً قانونياً أو تنظيمياً حقيقياً، ثم تلخيصه وتصنيفه.\n\nلا تفعل ما يلي إطلاقاً:\n- لا تخترع أي معلومة غير موجودة في النص.\n- لا تفسّر النظام أو تشرح أثره القانوني.\n- لا تعدّل المعنى القانوني أو تعيد صياغته بما يغيّره.\n\nقرارك الأول والوحيد المهم: هل هذا تحديث قانوني أو تنظيمي حقيقي؟\n\nاعتبره تحديثاً قانونياً (is_legal_update = true) إذا كان: نظاماً أو قانوناً جديداً، مرسوماً ملكياً أو سلطانياً أو أميرياً، قراراً وزارياً، لائحة تنفيذية، تعميماً، إطاراً تنظيمياً، إشعاراً رسمياً، متطلب امتثال، موعداً تنظيمياً نهائياً، سابقة قضائية، مشروعاً مطروحاً للاستطلاع، تغييراً ضريبياً أو جمركياً، تنظيماً للعمل أو التراخيص أو حماية البيانات أو الأمن السيبراني أو المنافسة أو التنظيم المالي.\n\nاعتبره غير قانوني (is_legal_update = false) فقط إذا كان خبراً غير قانوني بوضوح: خبر مؤتمر أو اجتماع أو ورشة، مذكرة تفاهم، زيارة رسمية، فعالية، مقابلة، بيان صحفي، إحصاءات، تقرير دوري، مقال رأي، محتوى تسويقي أو ترويجي، تعيينات إدارية، أو خبر قديم يعيد نشر ما سبق. عند الشك في التصنيف وليس في طبيعة الخبر، صنّفه كتحديث قانوني — لا يوجد حد أدنى للثقة يرفضه النظام؛ الرفض فقط لما هو غير قانوني بوضوح.\n\nأعد كائن JSON واحداً فقط بهذا الشكل بالضبط. لا نص قبله ولا بعده، ولا شرح، ولا علامات markdown.\n\n{\"is_legal_update\":true,\"title\":\"عنوان عربي واضح ودقيق مستمد من النص\",\"summary\":\"ملخص عربي من ٢ إلى ٤ جمل يذكر ما صدر ومن أصدره وما يترتب عليه من التزامات مذكورة صراحة\",\"category\":\"tax|customs|employment|corporate|financial|capital_markets|banking|data_privacy|cybersecurity|competition|intellectual_property|litigation|licensing|real_estate|energy|healthcare|trade|general\",\"country\":\"SA|AE|KW|QA|BH|OM|GCC\"}\n\nالقيم المسموحة لـ category و country محصورة في القوائم أعلاه حرفياً. أي قيمة خارجها تُرفَض ولا تُصحَّح — اختر general إن لم تتضح الفئة.",
+              "value": "أنت مصنِّف آلي في منصة رصد قانوني داخلية لإدارة قانونية.\n\nمهمتك محدودة بدقة: تحديد ما إذا كان النص تحديثاً قانونياً أو تنظيمياً حقيقياً، ثم تلخيصه وتصنيفه.\n\nلا تفعل ما يلي إطلاقاً:\n- لا تخترع أي معلومة غير موجودة في النص.\n- لا تفسّر النظام أو تشرح أثره القانوني.\n- لا تعدّل المعنى القانوني أو تعيد صياغته بما يغيّره.\n\nقرارك الأول والوحيد المهم: هل هذا تحديث قانوني أو تنظيمي حقيقي؟\n\nاعتبره تحديثاً قانونياً (is_legal_update = true) إذا كان: نظاماً أو قانوناً جديداً، مرسوماً ملكياً أو سلطانياً أو أميرياً، قراراً وزارياً، لائحة تنفيذية، تعميماً، إطاراً تنظيمياً، إشعاراً رسمياً، متطلب امتثال، موعداً تنظيمياً نهائياً، مشروعاً مطروحاً للاستطلاع، تغييراً ضريبياً أو جمركياً، تنظيماً للعمل أو التراخيص أو حماية البيانات أو الأمن السيبراني أو المنافسة أو التنظيم المالي.\n\nكذلك يُعتبر تحديثاً قانونياً (is_legal_update = true, category = litigation) أي محتوى له مسار قضائي أو نيابي واضح — بصرف النظر عن نوع القضية. لا تُستبعد القضية لمجرد كونها جنائية: القضايا الجنائية والاحتيال والفساد وغسل الأموال والمخدرات والجرائم المالية مؤهلة تماماً مثل القضايا التجارية والعمالية والإدارية والمدنية، طالما توفّر أحد هذه المؤشرات القضائية أو النيابية الواضحة في الخبر: إحالة إلى النيابة أو المحكمة، توجيه اتهام، بدء محاكمة، جلسة قضائية، استئناف أو طعن، صدور حكم، إدانة، براءة، عقوبة قضائية، قرار من النيابة العامة، أو تطور مهم في قضية قائمة. كذلك: حكم قضائي مهم، قرار أو حكم من محكمة النقض أو التمييز أو الاستئناف أو المحكمة العليا (بحسب نظام كل دولة)، سابقة أو مبدأ قضائي مهم، أو خبر رسمي من النيابة العامة أو جهة قضائية بمضمون قانوني حقيقي (وليس مجرد بيان إداري).\n\nاعتبره غير قانوني (is_legal_update = false) إذا كان خبراً غير قانوني بوضوح: خبر مؤتمر أو اجتماع أو ورشة، مذكرة تفاهم، زيارة رسمية، فعالية، مقابلة، بيان صحفي، إحصاءات، تقرير دوري، مقال رأي، محتوى تسويقي أو ترويجي، تعيينات إدارية، أو خبر قديم يعيد نشر ما سبق.\n\nوكذلك — تحديداً للمحتوى الجنائي/الأمني — اعتبره غير قانوني (is_legal_update = false) فقط إذا خلا تماماً من أي من المؤشرات القضائية أو النيابية المذكورة أعلاه: مجرد وقوع جريمة أو حادث أمني دون أي إجراء قانوني تالٍ، أو عملية ضبط/قبض أولية لم تُحَل بعد لجهة قضائية أو نيابية ولم يُذكر معها أي إجراء تالٍ. لا تستبعده لكونه جنائياً أو لاحتوائه على تفاصيل صادمة أو مثيرة — الفيصل الوحيد هو وجود أو غياب مؤشر قضائي/نيابي واضح كما سبق. كذلك اعتبره غير قانوني: خبر مشاهير أو شخصيات عامة لمجرد وجود قضية دون مضمون قانوني حقيقي، خبراً صحفياً مثيراً (tabloid) يذكر محكمة أو قضية في سياق عابر دون أن يكون الحكم أو القضية نفسها موضوع الخبر، أو محتوى من مصدر غير موثوق لا يمكن التحقق من دقته.\n\nعند الشك في التصنيف وليس في طبيعة الخبر، صنّفه كتحديث قانوني — لا يوجد حد أدنى للثقة يرفضه النظام؛ الرفض فقط لما هو غير قانوني بوضوح أو خبر أمني/جنائي بلا أي مؤشر قضائي أو نيابي كما وُصف أعلاه.\n\nحدّد أيضاً document_type وlegal_status. هذان حقلان مختلفان تماماً عن category ومختلفان عن بعضهما — لا تستنتج أحدهما من الآخر ولا من category:\n- category = المجال القانوني (ضرائب، تقاضي، تجارة...).\n- document_type = طبيعة الأداة القانونية نفسها (نظام، قرار، تعميم، حكم...).\n- legal_status = الحالة الحالية لتلك الأداة فقط (مشروع، ساري، مُعدَّل...).\n\nاختر document_type من هذه القائمة فقط — مطلوب دائماً، لا يُترك فارغاً:\n- law: نظام أو قانون، جديداً كان أو قائماً يُعدَّل، ما لم يكن مرسوماً.\n- royal_decree: مرسوم ملكي أو سلطاني أو أميري تحديداً.\n- ministerial_decision: قرار وزاري.\n- executive_regulation: لائحة تنفيذية.\n- regulatory_framework: إطار أو لائحة تنظيمية عامة ليست لائحة تنفيذية تحديداً.\n- circular: تعميم.\n- official_notice: إشعار رسمي من جهة حكومية أو تنظيمية لا يرقى لقرار أو تعميم بصيغته الرسمية.\n- court_precedent: حكم قضائي صدر فعلاً، أو سابقة أو مبدأ قضائي مستقر. لا تستخدمه لقضية لا تزال قيد النظر بلا حكم صادر — استخدم other لها مع الإبقاء على category=litigation إن انطبقت شروط القضايا أعلاه.\n- consultation_draft: مشروع مطروح تحديداً وصراحةً للاستطلاع أو التعليق العام قبل اعتماده. لا تستخدمه لمجرد \"مشروع قانون\" لم يُقر بعد بلا ذكر صريح لطرحه للاستطلاع العام — استخدم عندها نوع الأداة نفسه (غالباً law) مع legal_status=draft أو pending.\n- other: أي محتوى قانوني حقيقي القيمة لا يندرج تحت ما سبق (خبر رسمي ذو قيمة مهنية ليس نظاماً ولا لائحة ولا قراراً ولا تعميماً ولا حكماً).\n\nاختر legal_status من هذه القائمة فقط عند وجود دليل واضح وصريح في النص، وإلا أعده null حرفياً — لا تخمّن حالة لا يذكرها النص:\n- enacted: صدر أو اعتُمد رسمياً.\n- effective: نافذ حالياً وفق نص صريح.\n- draft: مشروع لم يُعتمد بعد.\n- amended: النص تعديل صريح على نظام أو قانون أو لائحة أو مادة قائمة.\n- repealed: أُلغي أو استُبدل صراحة.\n- pending: اعتُمد لكن نفاذه لم يبدأ بعد، أو له تاريخ نفاذ مستقبلي محدد.\n\nحدّد أيضاً gcc_relevant (true/false) — هل الفاعل القانوني نفسه، أي الجهة التي أصدرت أو اعتمدت أو حكمت في هذا المستجد بالذات، هي إحدى دول مجلس التعاون الست (السعودية، الإمارات، الكويت، قطر، البحرين، عُمان) أو مجلس التعاون لدول الخليج العربية نفسه؟ اجعله true فقط إذا كان من أصدر النظام أو القرار أو اللائحة أو التعميم، أو المحكمة التي أصدرت الحكم، جهة خليجية أو المجلس نفسه. اجعله false إذا كان الفاعل القانوني جهة أجنبية (كونغرس أو برلمان أو محكمة دولة غير خليجية)، حتى لو: كان مصدر الخبر نفسه خليجياً، أو ذُكرت دولة خليجية في السياق، أو كان للقانون الأجنبي أثر محتمل على شركات أو أفراد في الخليج. الأصل false ما لم يوجد دليل واضح أن الفعل القانوني نفسه صادر أو معتمد من جهة خليجية أو من مجلس التعاون — مجرد ذكر اسم دولة خليجية في النص لا يكفي وحده.\n\nأعد كائن JSON واحداً فقط بهذا الشكل بالضبط. لا نص قبله ولا بعده، ولا شرح، ولا علامات markdown.\n\n{\"is_legal_update\":true,\"title\":\"عنوان عربي واضح ودقيق مستمد من النص\",\"summary\":\"ملخص عربي من ٢ إلى ٤ جمل يذكر ما صدر ومن أصدره وما يترتب عليه من التزامات مذكورة صراحة\",\"category\":\"tax|customs|employment|corporate|financial|capital_markets|banking|data_privacy|cybersecurity|competition|intellectual_property|litigation|licensing|real_estate|energy|healthcare|trade|general\",\"country\":\"SA|AE|KW|QA|BH|OM|GCC\",\"document_type\":\"law|royal_decree|ministerial_decision|executive_regulation|circular|regulatory_framework|official_notice|court_precedent|consultation_draft|other\",\"legal_status\":\"enacted|effective|draft|amended|repealed|pending|null\",\"gcc_relevant\":true}\n\nالقيم المسموحة لـ category وcountry وdocument_type محصورة في القوائم أعلاه حرفياً. أي قيمة خارجها تُرفَض ولا تُصحَّح — اختر general لـcategory وother لـdocument_type إن لم يتضح ما هو أدق. legal_status وحده يقبل null عند غياب الدليل — بقية الحقول (بما فيها gcc_relevant) لا تقبل null إطلاقاً.",
               "type": "string"
             }
           ]
@@ -428,7 +448,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parses and validates the model's JSON. FAIL CLOSED.\n//\n// Anything malformed, incomplete, or outside the allowed enums is rejected\n// outright — never coerced, never defaulted. A coerced category would put a\n// confident wrong classification in a legal archive, which is worse than a gap.\n//\n// Azure's output contract is deliberately small: is_legal_update, title,\n// summary, category, country. There is no confidence score and no threshold\n// — a false classification is rejected here at the schema level, and\n// anything the model marks true is stored. document_type / legal_status /\n// effective_date / keywords / affected_entities are no longer produced by\n// the classifier; they stay null/empty on new rows (the columns remain, for\n// the historical records that do have them).\n\nconst COUNTRY = ['SA','AE','KW','QA','BH','OM','GCC'];\nconst CATEGORY = ['tax','customs','employment','corporate','financial','capital_markets','banking','data_privacy','cybersecurity','competition','intellectual_property','litigation','licensing','real_estate','energy','healthcare','trade','general'];\n\nconst nonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const item = entry.json.__item;\n  const response = entry.json;\n\n  const fail = (reason, detail) => out.push({ json: {\n    __item: item, __rejected: true, reason, detail: detail ? String(detail).slice(0,300) : null,\n  }});\n\n  // \"Classify with AI\" runs with n8n's own retryOnFail; a response that\n  // still failed after those retries arrives here as an HTTP error status\n  // rather than a body, via fullResponse + neverError.\n  const status = typeof response?.statusCode === 'number' ? response.statusCode : null;\n  if (status !== null && (status < 200 || status >= 300)) {\n    fail('ai_http_error', JSON.stringify({ status, body: response?.body }).slice(0, 300));\n    continue;\n  }\n\n  const body = status !== null ? response.body : response;\n  const text = body?.choices?.[0]?.message?.content || '';\n\n  if (body?.choices?.[0]?.finish_reason === 'length') {\n    fail('ai_truncated_response', text || null);\n    continue;\n  }\n\n  if (!nonEmpty(text)) {\n    fail('ai_empty_response');\n    continue;\n  }\n\n  let ai;\n  try {\n    ai = JSON.parse(text.trim());\n  } catch {\n    // One tolerated shape: the model wrapped the object in prose or a fence.\n    const m = text.match(/\\{[\\s\\S]*\\}/);\n    if (!m) { fail('ai_parse_failure', text); continue; }\n    try { ai = JSON.parse(m[0]); } catch { fail('ai_parse_failure', text); continue; }\n  }\n\n  if (!ai || typeof ai !== 'object' || Array.isArray(ai)) { fail('ai_not_an_object'); continue; }\n\n  if (typeof ai.is_legal_update !== 'boolean') { fail('ai_invalid_output', 'is_legal_update'); continue; }\n\n  // An item the model itself says is not a legal update is rejected here —\n  // \"only reject obvious non-legal news\" — never stored.\n  if (ai.is_legal_update !== true) { fail('not_legal_update'); continue; }\n\n  if (!nonEmpty(ai.title)) { fail('ai_invalid_output', 'title'); continue; }\n  if (!nonEmpty(ai.summary)) { fail('ai_invalid_output', 'summary'); continue; }\n  if (!COUNTRY.includes(ai.country)) { fail('ai_invalid_output', 'country=' + ai.country); continue; }\n  if (!CATEGORY.includes(ai.category)) { fail('ai_invalid_output', 'category=' + ai.category); continue; }\n\n  out.push({ json: {\n    __item: item,\n    __rejected: false,\n    ai: {\n      title_ar: ai.title.trim(),\n      summary_ar: ai.summary.trim(),\n      country: ai.country,\n      category: ai.category,\n      document_type: null,\n      legal_status: null,\n      is_legal_update: true,\n      confidence: null,\n      publication_date: null,\n      effective_date: null,\n      affected_entities: [],\n      keywords: [],\n    },\n  }});\n}\n\nreturn out;\n"
+        "jsCode": "// Parses and validates the model's JSON. FAIL CLOSED.\n//\n// Anything malformed, incomplete, or outside the allowed enums is rejected\n// outright — never coerced, never defaulted. A coerced category would put a\n// confident wrong classification in a legal archive, which is worse than a gap.\n//\n// Azure's output contract: is_legal_update, title, summary, category,\n// country, document_type, legal_status, gcc_relevant. There is no\n// confidence score and no threshold — a false classification is rejected\n// here at the schema level, and anything the model marks true is stored.\n// document_type/legal_status were re-enabled here (previously hardcoded to\n// null) once category alone proved unable to distinguish \"what kind of\n// instrument\" (new law vs. amendment vs. ministerial decision vs. court\n// ruling) from \"which practice area\" (tax, litigation...) — the two are\n// independent axes, never inferred from one another. gcc_relevant is a\n// separate, dedicated field (never inferred from `country`) answering \"is\n// the legal actor itself Gulf-based\" — added after a live incident where a\n// discovery source's own registered country wrongly let US Congress and\n// Turkish parliament news publish (see 03-publishing-gate.json Rule 4).\n// effective_date/keywords/affected_entities are still not produced by the\n// classifier; they stay null/empty on new rows (the columns remain, for the\n// historical records that do have them).\n\nconst COUNTRY = ['SA','AE','KW','QA','BH','OM','GCC'];\nconst CATEGORY = ['tax','customs','employment','corporate','financial','capital_markets','banking','data_privacy','cybersecurity','competition','intellectual_property','litigation','licensing','real_estate','energy','healthcare','trade','general'];\nconst DOCUMENT_TYPE = ['law','royal_decree','ministerial_decision','executive_regulation','circular','regulatory_framework','official_notice','court_precedent','consultation_draft','other'];\nconst LEGAL_STATUS = ['enacted','effective','draft','amended','repealed','pending'];\n\nconst nonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;\n\nconst out = [];\n\nfor (const entry of $input.all()) {\n  const item = entry.json.__item;\n  const response = entry.json;\n\n  const fail = (reason, detail) => out.push({ json: {\n    __item: item, __rejected: true, reason, detail: detail ? String(detail).slice(0,300) : null,\n  }});\n\n  // \"Classify with AI\" runs with n8n's own retryOnFail; a response that\n  // still failed after those retries arrives here as an HTTP error status\n  // rather than a body, via fullResponse + neverError.\n  const status = typeof response?.statusCode === 'number' ? response.statusCode : null;\n  if (status !== null && (status < 200 || status >= 300)) {\n    fail('ai_http_error', JSON.stringify({ status, body: response?.body }).slice(0, 300));\n    continue;\n  }\n\n  const body = status !== null ? response.body : response;\n  const text = body?.choices?.[0]?.message?.content || '';\n\n  if (body?.choices?.[0]?.finish_reason === 'length') {\n    fail('ai_truncated_response', text || null);\n    continue;\n  }\n\n  if (!nonEmpty(text)) {\n    fail('ai_empty_response');\n    continue;\n  }\n\n  let ai;\n  try {\n    ai = JSON.parse(text.trim());\n  } catch {\n    // One tolerated shape: the model wrapped the object in prose or a fence.\n    const m = text.match(/\\{[\\s\\S]*\\}/);\n    if (!m) { fail('ai_parse_failure', text); continue; }\n    try { ai = JSON.parse(m[0]); } catch { fail('ai_parse_failure', text); continue; }\n  }\n\n  if (!ai || typeof ai !== 'object' || Array.isArray(ai)) { fail('ai_not_an_object'); continue; }\n\n  if (typeof ai.is_legal_update !== 'boolean') { fail('ai_invalid_output', 'is_legal_update'); continue; }\n\n  // An item the model itself says is not a legal update is rejected here —\n  // \"only reject obvious non-legal news\" — never stored.\n  if (ai.is_legal_update !== true) { fail('not_legal_update'); continue; }\n\n  if (!nonEmpty(ai.title)) { fail('ai_invalid_output', 'title'); continue; }\n  if (!nonEmpty(ai.summary)) { fail('ai_invalid_output', 'summary'); continue; }\n  if (!COUNTRY.includes(ai.country)) { fail('ai_invalid_output', 'country=' + ai.country); continue; }\n  if (!CATEGORY.includes(ai.category)) { fail('ai_invalid_output', 'category=' + ai.category); continue; }\n  if (!DOCUMENT_TYPE.includes(ai.document_type)) { fail('ai_invalid_output', 'document_type=' + ai.document_type); continue; }\n  // legal_status is the one field allowed to be null — \"no clear evidence in\n  // the text\" is a normal, expected outcome, not a malformed response. A\n  // non-null value still has to be one of the six real statuses, though:\n  // anything else would fail the Postgres enum constraint on insert, which\n  // is a worse failure mode than rejecting it here with a clear reason.\n  if (ai.legal_status !== null && !LEGAL_STATUS.includes(ai.legal_status)) {\n    fail('ai_invalid_output', 'legal_status=' + ai.legal_status);\n    continue;\n  }\n  if (typeof ai.gcc_relevant !== 'boolean') { fail('ai_invalid_output', 'gcc_relevant'); continue; }\n\n  out.push({ json: {\n    __item: item,\n    __rejected: false,\n    ai: {\n      title_ar: ai.title.trim(),\n      summary_ar: ai.summary.trim(),\n      country: ai.country,\n      category: ai.category,\n      document_type: ai.document_type,\n      legal_status: ai.legal_status ?? null,\n      gcc_relevant: ai.gcc_relevant,\n      is_legal_update: true,\n      confidence: null,\n      publication_date: null,\n      effective_date: null,\n      affected_entities: [],\n      keywords: [],\n    },\n  }});\n}\n\nreturn out;\n"
       },
       "id": "081721b7-6539-42f3-a272-71bf53516dc5",
       "name": "Validate AI output",
@@ -613,15 +633,97 @@
     },
     {
       "parameters": {
-        "jsCode": "// Workflow 05 (Discovery Ingestion) already resolved and shaped these items\n// — this just turns the ONE trigger item's prefetched_items array into\n// separate n8n items, the same shape \"Merge lanes\" produces for an ordinary\n// official-lane crawl, so Normalise RawItem treats both identically.\nconst items = $('Called by scheduler').first().json.prefetched_items || [];\nreturn items.map((it) => ({ json: it }));"
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ !$json.publication_date && !!$('Called by scheduler').first().json.source.parser_config.date_from_detail }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "44c581d4-6683-4960-a5ca-478d9951983d",
-      "name": "Unwrap prefetched items",
+      "id": "8a1f2b3c-d4e5-4f60-9a1b-2c3d4e5f6071",
+      "name": "Needs detail-page date?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        912,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.source_url }}",
+        "options": {
+          "allowUnauthorizedCerts": "={{ !!$('Called by scheduler').first().json.source.parser_config.allow_insecure_tls }}",
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "9b2f3c4d-e5f6-4071-8a1b-3c4d5e6f7182",
+      "name": "Fetch detail page for date",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        480
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Opt-in, per-item detail-page date extraction — see \"Needs detail-page\n// date?\" for the gate. Only ever runs for an item whose listing had no\n// usable date AND whose source explicitly set parser_config.date_from_detail;\n// every other source's items skip this branch entirely (no extra request).\n//\n// Tries structured signals first (most to least specific), falling back to\n// parser_config.detail_date_selector — the same pick() mini-language used\n// for listings — only when none of them are present on the page.\n\nconst cfg = $('Called by scheduler').first().json.source.parser_config || {};\n\n// Extract date from detail page — tries structured signals first, in the\n// order the platform's own listing metadata would be trusted (most to least\n// specific), and only reaches for parser_config.detail_date_selector (the\n// same pick() mini-language used for listings) if none of them are present.\nconst extractDetailDate = (html) => {\n  // 1) JSON-LD — datePublished / dateCreated, anywhere in any <script\n  // type=\"application/ld+json\"> block, including a top-level array or an\n  // @graph wrapper.\n  const ldMatches = html.match(/<script[^>]*type=[\"']application\\/ld\\+json[\"'][^>]*>([\\s\\S]*?)<\\/script>/gi) || [];\n  for (const block of ldMatches) {\n    const jsonText = block.replace(/^<script[^>]*>/i, '').replace(/<\\/script>$/i, '');\n    try {\n      const parsed = JSON.parse(jsonText);\n      const candidates = Array.isArray(parsed) ? parsed : (parsed['@graph'] || [parsed]);\n      for (const node of candidates) {\n        const v = node && (node.datePublished || node.dateCreated);\n        if (v) return String(v);\n      }\n    } catch (e) {\n      // Malformed JSON-LD on the page — not this extractor's problem to fix,\n      // fall through to the next signal.\n    }\n  }\n\n  // 2) Meta tags — the common published-date variants, tried in order.\n  const metaNames = [\n    'article:published_time',\n    'article:modified_time',\n    'og:updated_time',\n    'datePublished',\n    'date',\n  ];\n  for (const name of metaNames) {\n    const re = new RegExp(`<meta[^>]*(?:property|name)=[\"']${name}[\"'][^>]*content=[\"']([^\"']+)[\"']`, 'i');\n    const m = html.match(re) || html.match(new RegExp(`<meta[^>]*content=[\"']([^\"']+)[\"'][^>]*(?:property|name)=[\"']${name}[\"']`, 'i'));\n    if (m) return m[1];\n  }\n\n  // 3) <time datetime=\"...\">\n  const dt = html.match(/<time[^>]*\\sdatetime=[\"']([^\"']+)[\"']/i);\n  if (dt) return dt[1];\n\n  return null;\n};\n\nconst pick = (html, selector) => {\n  if (!selector) return '';\n\n  // Optional trailing occurrence index — \"span:2\" is the 2nd <span> found in\n  // the fragment (see below), 1 unless stated, never assumed. Always the\n  // outermost suffix, so it applies the same whether or not \"@attr\" is also\n  // present (\"a@href:2\" means the 2nd <a>'s href).\n  const idxMatch = selector.match(/^(.*):(\\d+)$/);\n  const withoutIdx = idxMatch ? idxMatch[1] : selector;\n  const occurrence = idxMatch ? Math.max(1, Number(idxMatch[2])) : 1;\n\n  const attrMatch = withoutIdx.match(/^(.*)@([\\w-]+)$/);\n  const sel = (attrMatch ? attrMatch[1] : withoutIdx).trim();\n  const attr = attrMatch ? attrMatch[2] : null;\n\n  // Optional \"tag#substring\" targets whichever <tag> has an id CONTAINING\n  // that substring — ASP.NET/WebForms pages routinely prefix a real id with\n  // a long, template-generated control path (e.g. \"ctl00_ctl32_..._ItemDate\"),\n  // so a substring match is the part that's actually stable page to page.\n  const idMatch = sel.match(/^([a-zA-Z][\\w-]*)#(.+)$/);\n  const tag = (idMatch ? idMatch[1] : sel.split(/[\\s>]/).pop().replace(/[.#].*$/, '')) || 'a';\n  const idSubstring = idMatch ? idMatch[2] : null;\n\n  const idOf = (attrs) => {\n    const m = attrs.match(/\\sid=[\"']([^\"']*)[\"']/i);\n    return m ? m[1] : '';\n  };\n\n  if (attr) {\n    // Attribute extraction only ever needs the *opening* tag, so this never\n    // requires a matching close — mirrors the old behaviour exactly (the\n    // first tag that actually carries this attribute) when no :N/#id is\n    // given, and extends it with the same occurrence/id targeting.\n    const openRe = new RegExp(`<${tag}(\\\\s[^>]*)?>`, 'gi');\n    let count = 0, m;\n    while ((m = openRe.exec(html))) {\n      const attrs = m[1] || '';\n      if (idSubstring && !idOf(attrs).includes(idSubstring)) continue;\n      if (!new RegExp(`\\\\s${attr}=[\"']`, 'i').test(attrs)) continue;\n      count++;\n      if (count === occurrence) {\n        const av = attrs.match(new RegExp(`\\\\s${attr}=[\"']([^\"']+)[\"']`, 'i'));\n        return av ? av[1] : '';\n      }\n    }\n    return '';\n  }\n\n  // Finds the Nth complete <tag>...</tag> pair, tracking a same-tag depth\n  // stack so a wrapper that itself contains other <tag> elements resolves to\n  // its OWN matching close, not the nearest one anywhere after it (the old\n  // single non-greedy regex effectively did the latter, which silently\n  // truncated content whenever the same tag nested inside itself — the SAIP\n  // media-center publish date, reached only through two other <div>\n  // wrappers, is a real case this fixes). Occurrences are numbered in the\n  // order each pair *closes*, so an innermost/leaf element — normally what a\n  // config is actually reaching for — gets a low number regardless of how\n  // deep it sits; a flat run of siblings with no nesting at all numbers\n  // exactly as simple top-to-bottom counting would expect (unchanged from\n  // the old behaviour for occurrence 1 with no nesting).\n  const tokenRe = new RegExp(`<${tag}(\\\\s[^>]*)?>|</${tag}>`, 'gi');\n  const stack = [];\n  let count = 0, m, found = null;\n  while ((m = tokenRe.exec(html))) {\n    const isOpen = m[0][0] === '<' && m[0][1] !== '/';\n    if (isOpen) {\n      stack.push({ start: m.index + m[0].length, attrs: m[1] || '' });\n    } else {\n      const frame = stack.pop();\n      if (!frame) continue;\n      if (idSubstring && !idOf(frame.attrs).includes(idSubstring)) continue;\n      count++;\n      if (count === occurrence) { found = { attrs: frame.attrs, inner: html.slice(frame.start, m.index) }; break; }\n    }\n  }\n  if (!found) return '';\n\n  if (tag === 'time') {\n    const dt = found.attrs.match(/\\sdatetime=[\"']([^\"']+)[\"']/i);\n    if (dt) return dt[1];\n  }\n\n  return found.inner.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n};\n\nfunction parseDateSafe(raw) {\n  if (raw === null || raw === undefined) return null;\n  const EASTERN_DIGITS = '٠١٢٣٤٥٦٧٨٩';\n  let text = String(raw).trim().replace(/[٠-٩]/g, (ch) => String(EASTERN_DIGITS.indexOf(ch)));\n  if (!text) return null;\n\n  const pad = (n) => String(n).padStart(2, '0');\n  const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();\n  const isValid = (y, m, d) => m >= 1 && m <= 12 && d >= 1 && d <= daysInMonth(y, m);\n  const iso = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;\n\n  const HIJRI_MONTHS = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'ربيع الثاني', 'جمادى الأولى', 'جمادى الآخرة', 'جمادى الثاني', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];\n  const hasHijriSignal = (s) => HIJRI_MONTHS.some((m) => s.includes(m)) || /هـ|هجري|\\bAH\\b/i.test(s);\n\n  // Dual-calendar strings (\"16/04/2026 الموافق 28/10/1447 هجري\") pair a real\n  // Gregorian date with its Hijri equivalent via the connector \"الموافق\"\n  // (\"corresponding to\") — confirmed on Al-Meezan (Qatar), both on its law\n  // detail page's issuance date and publication date fields. When a Hijri\n  // signal appears strictly after that connector, only the text before it is\n  // eligible for Gregorian parsing below, so the real date is not thrown\n  // away by the Hijri guard. A bare Hijri date with no such connector (e.g.\n  // \"10 أغسطس 1448 هـ\", where \"أغسطس\" is a coincidental look-alike, not a\n  // second calendar) never contains \"الموافق\" and is untouched — still\n  // resolves to null via the guard exactly as before.\n  const connectorIdx = text.indexOf('الموافق');\n  if (connectorIdx !== -1 && hasHijriSignal(text.slice(connectorIdx))) {\n    text = text.slice(0, connectorIdx);\n  }\n\n  // 1) ISO date or datetime — YYYY-MM-DD, optionally with a time part.\n  const isoMatch = text.match(/\\b(\\d{4})-(\\d{2})-(\\d{2})(?:[T ][\\d:.,+Zz-]*)?/);\n  if (isoMatch) {\n    const y = Number(isoMatch[1]), m = Number(isoMatch[2]), d = Number(isoMatch[3]);\n    return isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  // 2) Hijri guard — recognised, never converted (see header comment).\n  if (hasHijriSignal(text)) return null;\n\n  // 3) Arabic Gregorian month names — \"10 أغسطس 2026\" / \"05-أغسطس-2026\".\n  const AR_MONTHS = { 'يناير': 1, 'فبراير': 2, 'مارس': 3, 'أبريل': 4, 'إبريل': 4, 'مايو': 5, 'يونيو': 6, 'يوليو': 7, 'أغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'نوفمبر': 11, 'ديسمبر': 12 };\n  const arMonthNames = Object.keys(AR_MONTHS).sort((a, b) => b.length - a.length).join('|');\n  const arMatch = text.match(new RegExp(`(\\\\d{1,2})\\\\s*[-\\\\s]\\\\s*(${arMonthNames})\\\\s*[-\\\\s]\\\\s*(\\\\d{4})`));\n  if (arMatch) {\n    const d = Number(arMatch[1]), m = AR_MONTHS[arMatch[2]], y = Number(arMatch[3]);\n    return isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  // 4) English month names — \"August 5, 2026\" / \"5 August 2026\" /\n  // \"05 Aug 2026\" / RFC-822 (\"Wed, 05 Aug 2026 10:00:00 GMT\").\n  const EN_MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };\n  const enMonthNames = 'january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec';\n  const dayFirst = text.match(new RegExp(`\\\\b(\\\\d{1,2})\\\\s+(${enMonthNames})\\\\.?,?\\\\s+(\\\\d{4})\\\\b`, 'i'));\n  const monthFirst = !dayFirst && text.match(new RegExp(`\\\\b(${enMonthNames})\\\\.?\\\\s+(\\\\d{1,2}),?\\\\s+(\\\\d{4})\\\\b`, 'i'));\n  if (dayFirst || monthFirst) {\n    const d = Number(dayFirst ? dayFirst[1] : monthFirst[2]);\n    const monthWord = (dayFirst ? dayFirst[2] : monthFirst[1]).toLowerCase();\n    const m = EN_MONTHS[monthWord.slice(0, 3)];\n    const y = Number(dayFirst ? dayFirst[3] : monthFirst[3]);\n    return m && isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  // 5) Numeric day-first — DD/MM/YYYY, DD-MM-YYYY, or DD.MM.YYYY (the dot\n  // form is real: SAIP's media-center listing uses \"09.07.2026\"). First\n  // number is always the day, second is always the month (see header\n  // comment) — never inferred from magnitude, so \"08/10/2026\" is always 8\n  // Oct, not a guess, and label text before the numbers (e.g. \"القرارات\n  // 10/08/2026\") does not block the match.\n  const numMatch = text.match(/\\b(\\d{1,2})[\\/\\-.](\\d{1,2})[\\/\\-.](\\d{4})\\b/);\n  if (numMatch) {\n    const d = Number(numMatch[1]), m = Number(numMatch[2]), y = Number(numMatch[3]);\n    return isValid(y, m, d) ? iso(y, m, d) : null;\n  }\n\n  return null;\n}\n\n// Runs once for the whole batch (not per item) like every other lane node\n// in this workflow, looping explicitly so a source with N items awaiting a\n// detail-page date actually gets all N processed, not just the first.\nreturn $input.all().map((item, i) => {\n  const original = $('Normalise RawItem').itemMatching(i).json;\n  const html = item.json.data || '';\n  let extracted = extractDetailDate(html);\n  if (!extracted && cfg.detail_date_selector) {\n    extracted = pick(html, cfg.detail_date_selector);\n  }\n  return {\n    json: {\n      ...original,\n      publication_date: parseDateSafe(extracted) || original.publication_date,\n    },\n  };\n});\n"
+      },
+      "id": "ac3f4d5e-f607-4182-9b2c-4d5e6f718293",
+      "name": "Extract date from detail page",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -16,
-        480
+        1344,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// The detail-page fetch itself failed (network error, non-200, timeout) —\n// this must never fail the item. It already had no date before this branch\n// was entered, so it simply continues with the date it already had (null),\n// exactly as if parser_config.date_from_detail were not set at all.\nreturn $input.all().map((item, i) => ({ json: $('Normalise RawItem').itemMatching(i).json }));\n"
+      },
+      "id": "bd4f5e6f-7182-4293-ac3d-5e6f71829304",
+      "name": "Detail fetch failed — keep original",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "ce5f6071-8293-4304-bd4e-6f7182930415",
+      "name": "Merge detail-page date",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1568,
+        560
       ]
     }
   ],
@@ -822,7 +924,7 @@
       "main": [
         [
           {
-            "node": "Has items?",
+            "node": "Needs detail-page date?",
             "type": "main",
             "index": 0
           }
@@ -950,7 +1052,7 @@
       "main": [
         [
           {
-            "node": "Unwrap prefetched items",
+            "node": "Normalise RawItem",
             "type": "main",
             "index": 0
           }
@@ -964,11 +1066,69 @@
         ]
       ]
     },
-    "Unwrap prefetched items": {
+    "Needs detail-page date?": {
       "main": [
         [
           {
-            "node": "Normalise RawItem",
+            "node": "Fetch detail page for date",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge detail-page date",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Fetch detail page for date": {
+      "main": [
+        [
+          {
+            "node": "Extract date from detail page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Detail fetch failed — keep original",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract date from detail page": {
+      "main": [
+        [
+          {
+            "node": "Merge detail-page date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detail fetch failed — keep original": {
+      "main": [
+        [
+          {
+            "node": "Merge detail-page date",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge detail-page date": {
+      "main": [
+        [
+          {
+            "node": "Has items?",
             "type": "main",
             "index": 0
           }

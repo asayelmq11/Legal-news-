@@ -125,8 +125,12 @@ describe('n8n workflow exports', () => {
   })
 
   it('the four fetch lanes retry on transient failure and isolate their errors', () => {
+    // Named explicitly rather than matched by a "Fetch" prefix: the opt-in
+    // per-item detail-page fetch (M14) also starts with "Fetch" but is not
+    // one of the four top-level source lanes and is covered by its own test.
     const wf = loadFull('02-source-ingestion.json')
-    const lanes = wf.nodes.filter((n) => n.type === 'n8n-nodes-base.httpRequest' && n.name.startsWith('Fetch'))
+    const laneNames = ['Fetch RSS', 'Fetch API', 'Fetch HTML', 'Fetch PDF index']
+    const lanes = wf.nodes.filter((n) => laneNames.includes(n.name))
     expect(lanes.length).toBe(4)
     for (const node of lanes) {
       expect(node.retryOnFail, `${node.name} must retry`).toBe(true)
@@ -134,6 +138,18 @@ describe('n8n workflow exports', () => {
       // cannot stop the others in the same tick
       expect(node.onError).toBe('continueErrorOutput')
     }
+  })
+
+  it('the opt-in detail-page date fetch also retries and isolates its errors', () => {
+    // A per-item fetch failure here must never fail the whole run — it
+    // already had no date before this branch was entered (see "Needs
+    // detail-page date?"), so a failure just leaves it at null, same as if
+    // date_from_detail were unset.
+    const wf = loadFull('02-source-ingestion.json')
+    const node = wf.nodes.find((n) => n.name === 'Fetch detail page for date')
+    expect(node?.type).toBe('n8n-nodes-base.httpRequest')
+    expect(node?.retryOnFail).toBe(true)
+    expect(node?.onError).toBe('continueErrorOutput')
   })
 
   it('every fetch lane accepts a per-source TLS bypass, never on by default', () => {
@@ -643,9 +659,16 @@ describe('n8n workflow exports', () => {
     const wf = loadFull('02-source-ingestion.json')
     const names = wf.nodes.map((n) => n.name)
     expect(names).toContain('Has prefetched items?')
-    expect(names).toContain('Unwrap prefetched items')
     expect(wf.connections['Called by scheduler']?.main[0]).toEqual([
       { node: 'Has prefetched items?', type: 'main', index: 0 },
+    ])
+    // Prefetched items go straight to Normalise RawItem — the official parser
+    // lanes (Parser router onward) only run for the non-prefetched branch.
+    expect(wf.connections['Has prefetched items?']?.main[0]).toEqual([
+      { node: 'Normalise RawItem', type: 'main', index: 0 },
+    ])
+    expect(wf.connections['Has prefetched items?']?.main[1]).toEqual([
+      { node: 'Parser router', type: 'main', index: 0 },
     ])
   })
 
