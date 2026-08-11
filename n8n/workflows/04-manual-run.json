@@ -546,7 +546,7 @@
             "index": 0
           },
           {
-            "node": "Prepare official dispatch",
+            "node": "Get eligible official sources",
             "type": "main",
             "index": 0
           },
@@ -559,6 +559,17 @@
         [
           {
             "node": "Handle insert race or failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get eligible official sources": {
+      "main": [
+        [
+          {
+            "node": "Prepare official dispatch",
             "type": "main",
             "index": 0
           }

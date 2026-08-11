@@ -442,12 +442,24 @@ describe('n8n workflow exports', () => {
     // running run" fans out to "Respond: accepted" AND the dispatch chain in
     // PARALLEL — the response is reachable without passing through either
     // dispatch node, so it cannot be delayed by them.
+    //
+    // The official chain's entry point is "Get eligible official sources"
+    // (a live read of the sources table), not "Prepare official dispatch"
+    // directly — fixed 2026-08-11: that node used to sit unconnected while
+    // "Prepare official dispatch" read $input from "Insert running run"
+    // itself (the just-created run-tracking row, which has no `base_url`),
+    // so its own `typeof s.base_url === 'string'` filter always produced
+    // zero eligible sources and no official source was ever dispatched by a
+    // manual refresh, from the 2026-08-09 rewrite until this fix.
     const wf = loadFull('04-manual-run.json')
     const insert = wf.connections['Insert running run']?.main[0] ?? []
     const targets = insert.map((c) => c.node)
     expect(targets).toContain('Respond: accepted')
-    expect(targets).toContain('Prepare official dispatch')
+    expect(targets).toContain('Get eligible official sources')
     expect(targets).toContain('Prepare discovery dispatch')
+
+    const eligibleTargets = (wf.connections['Get eligible official sources']?.main[0] ?? []).map((c) => c.node)
+    expect(eligibleTargets).toContain('Prepare official dispatch')
 
     // Confirm there is no path FROM the dispatch nodes back INTO the respond
     // node — i.e. the response really is on a separate branch, not staged
@@ -659,16 +671,26 @@ describe('n8n workflow exports', () => {
     const wf = loadFull('02-source-ingestion.json')
     const names = wf.nodes.map((n) => n.name)
     expect(names).toContain('Has prefetched items?')
+    expect(names).toContain('Unwrap prefetched items')
     expect(wf.connections['Called by scheduler']?.main[0]).toEqual([
       { node: 'Has prefetched items?', type: 'main', index: 0 },
     ])
-    // Prefetched items go straight to Normalise RawItem — the official parser
-    // lanes (Parser router onward) only run for the non-prefetched branch.
+    // Prefetched items go through Unwrap prefetched items (which turns the
+    // ONE trigger item's prefetched_items array into separate top-level
+    // RawItems) before Normalise RawItem — never straight there. Fixed
+    // 2026-08-11: for a window with this step missing, Normalise RawItem
+    // read r.source_url off the wrapper object itself (undefined), so every
+    // discovery item was rejected as no_url before classification, 100% of
+    // the time, live-confirmed. The official parser lanes (Parser router
+    // onward) only run for the non-prefetched branch, unaffected either way.
     expect(wf.connections['Has prefetched items?']?.main[0]).toEqual([
-      { node: 'Normalise RawItem', type: 'main', index: 0 },
+      { node: 'Unwrap prefetched items', type: 'main', index: 0 },
     ])
     expect(wf.connections['Has prefetched items?']?.main[1]).toEqual([
       { node: 'Parser router', type: 'main', index: 0 },
+    ])
+    expect(wf.connections['Unwrap prefetched items']?.main[0]).toEqual([
+      { node: 'Normalise RawItem', type: 'main', index: 0 },
     ])
   })
 

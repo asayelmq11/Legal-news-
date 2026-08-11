@@ -633,6 +633,19 @@
     },
     {
       "parameters": {
+        "jsCode": "// Workflow 05 (Discovery Ingestion) already resolved and shaped these items\n// — this just turns the ONE trigger item's prefetched_items array into\n// separate n8n items, the same shape \"Merge lanes\" produces for an ordinary\n// official-lane crawl, so Normalise RawItem treats both identically.\n//\n// Restored 2026-08-11: this step existed under the same name before the\n// 2026-08-09 rewrite and was dropped when \"Has prefetched items?\" was wired\n// straight to \"Normalise RawItem\". Normalise RawItem reads r.source_url\n// etc. off each top-level $input item; without this step it instead saw\n// ONE item shaped { source, prefetched_items: [...] }, so r.source_url was\n// always undefined and every discovery item was rejected as no_url before\n// ever reaching classification — confirmed live (2026-08-11 investigation)\n// across every discovery source, 100% no_url, for every run since the\n// rewrite.\nconst items = $('Called by scheduler').first().json.prefetched_items || [];\nreturn items.map((it) => ({ json: it }));"
+      },
+      "id": "unwrap0001-0000-0000-0000-000000000001",
+      "name": "Unwrap prefetched items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -176,
+        560
+      ]
+    },
+    {
+      "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
@@ -1052,7 +1065,7 @@
       "main": [
         [
           {
-            "node": "Normalise RawItem",
+            "node": "Unwrap prefetched items",
             "type": "main",
             "index": 0
           }
@@ -1060,6 +1073,17 @@
         [
           {
             "node": "Parser router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unwrap prefetched items": {
+      "main": [
+        [
+          {
+            "node": "Normalise RawItem",
             "type": "main",
             "index": 0
           }
