@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-09T11:31:08.797Z",
+  "updatedAt": "2026-08-12T11:53:41.137Z",
   "createdAt": "2026-08-03T11:23:07.947Z",
   "id": "vCGP6RoEAhiG9LS5",
   "name": "05 — Discovery Ingestion",
@@ -224,34 +224,36 @@
     },
     {
       "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "value": "FHt8uKbBcixIWbWO",
-          "mode": "list",
-          "cachedResultUrl": "/workflow/FHt8uKbBcixIWbWO",
-          "cachedResultName": "02 — Source Ingestion"
-        },
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {},
-          "matchingColumns": [],
-          "schema": [],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": true
-        },
+        "method": "POST",
+        "url": "https://client1.tashghil.pro/webhook/source-ingestion-dispatch",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
-          "waitForSubWorkflow": true
-        },
-        "mode": "each"
+          "batching": {
+            "batch": {
+              "batchSize": 4
+            }
+          }
+        }
       },
       "id": "12170f6d-652c-4e99-b6b8-56dc3aabba63",
       "name": "Dispatch to ingestion",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         208,
         336
-      ]
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "doxPLvXAnEsVG6Wj",
+          "name": "Manual Refresh Trigger Secret"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {

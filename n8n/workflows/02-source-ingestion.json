@@ -1,21 +1,10 @@
 {
-  "updatedAt": "2026-08-10T21:53:15.459Z",
+  "updatedAt": "2026-08-12T11:53:37.787Z",
   "createdAt": "2026-08-01T16:46:39.922Z",
   "id": "FHt8uKbBcixIWbWO",
   "name": "02 — Source Ingestion",
   "description": null,
   "nodes": [
-    {
-      "parameters": {},
-      "id": "9858366b-8ef5-4bd8-b4a4-107e49c5436f",
-      "name": "Called by scheduler",
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
-      "position": [
-        -480,
-        304
-      ]
-    },
     {
       "parameters": {
         "rules": {
@@ -633,19 +622,6 @@
     },
     {
       "parameters": {
-        "jsCode": "// Workflow 05 (Discovery Ingestion) already resolved and shaped these items\n// — this just turns the ONE trigger item's prefetched_items array into\n// separate n8n items, the same shape \"Merge lanes\" produces for an ordinary\n// official-lane crawl, so Normalise RawItem treats both identically.\n//\n// Restored 2026-08-11: this step existed under the same name before the\n// 2026-08-09 rewrite and was dropped when \"Has prefetched items?\" was wired\n// straight to \"Normalise RawItem\". Normalise RawItem reads r.source_url\n// etc. off each top-level $input item; without this step it instead saw\n// ONE item shaped { source, prefetched_items: [...] }, so r.source_url was\n// always undefined and every discovery item was rejected as no_url before\n// ever reaching classification — confirmed live (2026-08-11 investigation)\n// across every discovery source, 100% no_url, for every run since the\n// rewrite.\nconst items = $('Called by scheduler').first().json.prefetched_items || [];\nreturn items.map((it) => ({ json: it }));"
-      },
-      "id": "unwrap0001-0000-0000-0000-000000000001",
-      "name": "Unwrap prefetched items",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -176,
-        560
-      ]
-    },
-    {
-      "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
@@ -737,6 +713,73 @@
       "position": [
         1568,
         560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Workflow 05 (Discovery Ingestion) already resolved and shaped these items\n// — this just turns the ONE trigger item's prefetched_items array into\n// separate n8n items, the same shape \"Merge lanes\" produces for an ordinary\n// official-lane crawl, so Normalise RawItem treats both identically.\n//\n// Restored 2026-08-11: this step existed under the same name before the\n// 2026-08-09 rewrite and was dropped when \"Has prefetched items?\" was wired\n// straight to \"Normalise RawItem\". Normalise RawItem reads r.source_url\n// etc. off each top-level $input item; without this step it instead saw\n// ONE item shaped { source, prefetched_items: [...] }, so r.source_url was\n// always undefined and every discovery item was rejected as no_url before\n// ever reaching classification — confirmed live (2026-08-11 investigation)\n// across every discovery source, 100% no_url, for every run since the\n// rewrite.\nconst items = $('Called by scheduler').first().json.prefetched_items || [];\nreturn items.map((it) => ({ json: it }));"
+      },
+      "id": "unwrap0001-0000-0000-0000-000000000001",
+      "name": "Unwrap prefetched items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -176,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "source-ingestion-dispatch",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "530ac544-adc1-4374-88b6-62896f3239f4",
+      "name": "Dispatch webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        304
+      ],
+      "webhookId": "275033a6-d589-47b3-baf2-6384f64cd48b",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "doxPLvXAnEsVG6Wj",
+          "name": "Manual Refresh Trigger Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $json.body }];"
+      },
+      "id": "56bf7de3-77fe-41be-bee0-3017ec76f65d",
+      "name": "Called by scheduler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "dbaba7bf-1f16-47d8-9c0b-b2c534806235",
+      "name": "Respond to dispatch webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1650,
+        470
       ]
     }
   ],
@@ -1079,17 +1122,6 @@
         ]
       ]
     },
-    "Unwrap prefetched items": {
-      "main": [
-        [
-          {
-            "node": "Normalise RawItem",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Needs detail-page date?": {
       "main": [
         [
@@ -1153,6 +1185,61 @@
         [
           {
             "node": "Has items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unwrap prefetched items": {
+      "main": [
+        [
+          {
+            "node": "Normalise RawItem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch webhook": {
+      "main": [
+        [
+          {
+            "node": "Called by scheduler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarise run": {
+      "main": [
+        [
+          {
+            "node": "Respond to dispatch webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build empty run summary": {
+      "main": [
+        [
+          {
+            "node": "Respond to dispatch webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build failed run summary": {
+      "main": [
+        [
+          {
+            "node": "Respond to dispatch webhook",
             "type": "main",
             "index": 0
           }

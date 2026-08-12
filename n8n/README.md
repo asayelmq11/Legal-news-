@@ -272,12 +272,29 @@ ago that was.
      follows.
    - **`Prepare official dispatch` → `Dispatch official ingestion`** resolves
      every `active` + `verified` + non-`discovery` source (the same
-     eligibility the old scheduler enforced) and calls `02` once per source,
-     **waiting** for each — safe now that the client already has its
+     eligibility the old scheduler enforced) and dispatches into `02`, up to
+     **4 sources concurrently** — safe now that the client already has its
      response on the branch above.
    - **`Prepare discovery dispatch` → `Dispatch discovery catch-up`** calls
      `05` once (it fans out to every discovery source and resolved group
-     internally), also waiting.
+     internally, also dispatching into `02` up to 4 at a time).
+
+   Both dispatch nodes call `02`'s webhook (`POST
+   /webhook/source-ingestion-dispatch`, same `X-Trigger-Secret` credential as
+   `04`'s own webhook) via an `httpRequest` node with n8n's native
+   `options.batching.batch.batchSize: 4` — the same controlled-concurrency
+   mechanism already used by `Classify with AI` (§4). n8n's execution engine
+   processes even independent graph branches strictly sequentially within one
+   execution (confirmed empirically — `Execute Workflow` in `each` mode never
+   overlaps calls), so this batched-HTTP-webhook pattern is the only way to
+   get real concurrency for source dispatch; a same-graph parallel branch fan
+   out would not have reduced runtime. `02`'s trigger is this webhook (a Code
+   node named `Called by scheduler` reshapes `$json.body` back into the same
+   payload shape the old `executeWorkflowTrigger` produced, so every
+   downstream node in `02` that reads `$('Called by scheduler')` is
+   unchanged) plus a `Respond to dispatch webhook` node returning the same
+   per-source summary shape `Finalize run` and `Build health update` already
+   expected.
 5. **`Finalize run`** aggregates `items_published` across every result from
    both dispatch branches and writes `status = 'succeeded'` (or `'failed'`,
    only if every single dispatch failed to even start — an isolated
