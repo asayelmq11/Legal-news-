@@ -27,7 +27,7 @@ export default async function DashboardPage() {
       <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <h1 className="sr-only">لوحة المتابعة</h1>
         <p className="text-sm text-(--color-ink-muted)">
-          أهلاً {user.full_name ?? user.email} — التحديثات القانونية الأخيرة في دول مجلس التعاون.
+          أهلاً {user.full_name ?? user.email} التحديثات القانونية الأخيرة في دول مجلس التعاون.
         </p>
         <RefreshButton initialStatus={refreshStatus} />
       </header>

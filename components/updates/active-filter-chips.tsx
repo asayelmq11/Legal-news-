@@ -79,7 +79,7 @@ export async function ActiveFilterChips({ filters }: { filters: ArchiveFilters }
     const to = filters.publishedTo ? formatDateAr(filters.publishedTo) : '—'
     chips.push({
       key: 'date',
-      label: `التاريخ: ${from} – ${to}`,
+      label: `التاريخ: ${from} ${to}`,
       href: `/updates${buildArchiveQuery({
         ...filters,
         publishedFrom: undefined,

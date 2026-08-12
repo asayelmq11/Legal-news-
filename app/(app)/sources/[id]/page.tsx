@@ -69,7 +69,7 @@ export default async function SourceDetailPage({
       {source.config_status === 'requires_subscription' ? (
         <p className="rounded-(--radius-control) border border-(--color-danger) bg-(--color-danger-subtle) px-4 py-3 text-sm text-(--color-ink-muted)">
           <strong className="text-(--color-danger)">يتطلب اشتراكاً.</strong> لم يُحدَّد مسار وصول
-          مشروع بعد. لا يجوز الالتفاف على الحماية أو استخدام وسائل وصول غير مصرّح بها — يبقى المصدر
+          مشروع بعد. لا يجوز الالتفاف على الحماية أو استخدام وسائل وصول غير مصرّح بها يبقى المصدر
           موقوفاً حتى تُقرّ الإدارة القانونية وسيلة وصول نظامية.
         </p>
       ) : null}
@@ -132,7 +132,7 @@ export default async function SourceDetailPage({
         </dl>
         {source.ingestion_mode === 'discovery' ? (
           <p className="mt-3 text-xs text-(--color-ink-subtle)">
-            هذا مصدر اكتشاف، وليس جهة رسمية — يزوّد المرشحين لبوابة النشر عبر تحليل الذكاء الاصطناعي؛
+            هذا مصدر اكتشاف، وليس جهة رسمية يزوّد المرشحين لبوابة النشر عبر تحليل الذكاء الاصطناعي؛
             لا يُنشر منه شيء إلا بعد تصنيف قانوني وتحقق.
           </p>
         ) : null}

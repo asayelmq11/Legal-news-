@@ -28,7 +28,7 @@ export default function ConfigurationErrorPage() {
           </ul>
           <p className="text-xs text-(--color-ink-subtle)">
             راجع ملف <span dir="ltr">.env.example</span>. لا تُخزَّن مفاتيح الخدمة في التطبيق
-            إطلاقاً — مكانها بيانات اعتماد n8n.
+            إطلاقاً مكانها بيانات اعتماد n8n.
           </p>
         </div>
       }

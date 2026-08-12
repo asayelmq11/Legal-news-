@@ -90,7 +90,7 @@ export function SettingEditor({
         <SubmitButton>حفظ</SubmitButton>
         <p className="text-xs text-(--color-ink-subtle)">
           {updatedAt ? `آخر تعديل ${updatedAt}` : 'لم يُعدَّل بعد'}
-          {updatedByLabel ? ` — ${updatedByLabel}` : ''}
+          {updatedByLabel ? ` ${updatedByLabel}` : ''}
         </p>
       </div>
 

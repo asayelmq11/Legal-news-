@@ -12,7 +12,7 @@ import { canActivate } from '@/lib/sources/status'
 const STATUS_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
   { value: 'pending_verification', label: 'بانتظار التحقق' },
   { value: 'verified', label: 'تم التحقق' },
-  { value: 'blocked_by_access', label: 'محجوب — تعذّر الوصول' },
+  { value: 'blocked_by_access', label: 'محجوب تعذّر الوصول' },
   { value: 'requires_subscription', label: 'يتطلب اشتراكاً' },
 ]
 

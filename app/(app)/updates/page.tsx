@@ -110,7 +110,7 @@ async function Results({
         </p>
         {usedFuzzyFallback ? (
           <p className="rounded-(--radius-control) bg-(--color-warn-subtle) px-3 py-1 text-xs text-(--color-warn)">
-            لا توجد مطابقات تامة — عُرضت نتائج تقريبية.
+            لا توجد مطابقات تامة عُرضت نتائج تقريبية.
           </p>
         ) : null}
       </div>

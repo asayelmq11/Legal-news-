@@ -62,7 +62,7 @@ export function KpiStrip({
       {unclassifiedCount > 0 ? (
         <p className="text-xs text-(--color-ink-subtle)">
           المؤشرات القائمة على النوع محسوبة على {distribution.classifiedTotal} سجلاً مصنَّفاً من إجمالي{' '}
-          {totalUpdates} — {unclassifiedCount} سجلاً أقدم بلا نوع مصنَّف بعد لم يُحتسب ضمنها.
+          {totalUpdates} {unclassifiedCount} سجلاً أقدم بلا نوع مصنَّف بعد لم يُحتسب ضمنها.
         </p>
       ) : null}
     </div>

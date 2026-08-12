@@ -56,8 +56,8 @@ export function RefreshButton({ initialStatus }: { initialStatus: RefreshStatus 
         tone: 'ok',
         text:
           count > 0
-            ? `تم التحديث — تمت إضافة ${count} ${count === 1 ? 'مستجد جديد' : 'مستجدات جديدة'}`
-            : 'تم التحديث — لا توجد مستجدات جديدة',
+            ? `تم التحديث تمت إضافة ${count} ${count === 1 ? 'مستجد جديد' : 'مستجدات جديدة'}`
+            : 'تم التحديث لا توجد مستجدات جديدة',
       })
     } else if (status.latest?.status === 'failed') {
       setMessage({ tone: 'error', text: 'تعذّر إكمال التحديث. حاول مرة أخرى.' })
@@ -107,7 +107,7 @@ export function RefreshButton({ initialStatus }: { initialStatus: RefreshStatus 
             KPI strip's own solid tile just below it. */}
         <button type="button" onClick={handleClick} disabled={busy} className={BUTTON.ghost}>
           <RefreshIcon className={cn('size-4', busy && 'animate-spin')} />
-          {busy ? 'جارٍ تحديث المستجدات…' : 'تحديث المستجدات'}
+          {busy ? 'جاري تحديث المستجدات…' : 'تحديث المستجدات'}
         </button>
       </div>
       {message ? (

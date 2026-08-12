@@ -121,7 +121,7 @@ export function SourceForm({ source }: { source?: SourceRow }) {
       <Field
         id="parser_config"
         label="إعدادات المحلّل (JSON)"
-        hint="يصف أين تُقرأ البيانات فقط. لا تضع هنا عتبات أو قواعد نشر أو إعادة محاولة — مكانها n8n."
+        hint="يصف أين تُقرأ البيانات فقط. لا تضع هنا عتبات أو قواعد نشر أو إعادة محاولة مكانها n8n."
         error={err('parser_config')}
       >
         <textarea
@@ -138,13 +138,13 @@ export function SourceForm({ source }: { source?: SourceRow }) {
           dir="ltr"
         />
         <p className="text-xs text-(--color-warn)">
-          القالب المعروض فارغ عمداً. لا تُدخل مُحدِّدات مخمَّنة — المُحدِّد الخاطئ الذي يطابق شيئاً ما
+          القالب المعروض فارغ عمداً. لا تُدخل مُحدِّدات مخمَّنة المُحدِّد الخاطئ الذي يطابق شيئاً ما
           يملأ الأرشيف بمحتوى واثق وخاطئ منسوب إلى جهة رسمية.
         </p>
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="priority" label="الأولوية (1 الأسرع — 5 الأبطأ)" error={err('priority')}>
+        <Field id="priority" label="الأولوية (1 الأسرع 5 الأبطأ)" error={err('priority')}>
           <input
             id="priority"
             name="priority"
